@@ -1,0 +1,11 @@
+{application, stableboy,
+ [
+  {description, ""},
+  {vsn, "git"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {env, []}
+ ]}.
