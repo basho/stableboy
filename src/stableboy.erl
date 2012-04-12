@@ -23,7 +23,7 @@
 
 %% Exported so I can use apply()
 %% Don't call these
--export([help/2, vm/2, debug/2, cmd/2, config_file/2]).
+-export([help/2, vm/2, debug/2, cmd/2, config_file/2, count/2]).
 
 
 %% Entry point for escript
@@ -45,7 +45,9 @@ main (Args) ->
     %% set flags
     set_flags(Options, NonOptionArgs),
 
-    %% TODO: run command
+    %% run command
+    run_command(),
+
     ok.
 
 
@@ -112,13 +114,14 @@ set_flags(Options, NonOptionArgs) ->
 
 %% -i or --vm
 vm (Args, _N) ->
-    lager:debug("In vm with args: ~p", [Args]),
+    [VM|_] = Args,
+    lager:debug("In vm with args: ~p", [VM]),
     lager:warning("Alternate VM backends not yet supported"),
-    sb:set_config(vm, Args).
+    sb:set_config(vm, VM).
 
 %% -h or --help
 help (Args, _N) ->
-    lager:debug("In help with args: ~p", [Args]),
+    lager:debug("In help with args: ~p", Args),
     show_usage(),
     halt().
 
@@ -130,10 +133,10 @@ debug (_A, _N) ->
 
 %% -f or --config_file
 config_file(Args, _N) ->
-    lager:debug("In config_file with args: ~p", [Args]),
+    lager:debug("In config_file with args: ~p", Args),
     case sb:load_config(Args) of
         ok ->
-            sb:set_config(configfile, Args);
+            sb:set_config(config_file, Args);
         {error, enoent} ->
             lager:error("Config file ~p does not exist, exiting", Args),
             halt(1);
@@ -142,17 +145,24 @@ config_file(Args, _N) ->
             halt(1)
     end.
 
+%% -n or --count
+count(Args, _N) ->
+    lager:debug("In count with args: '~p'", Args),
+    sb:set_config(count, Args).
+
 
 %% the verb to run
 cmd (Command, Args) ->
     lager:debug("In cmd with command: ~p and args: ~p", [Command, Args]),
     [Com|_] = Command,
     case {Com, Args} of
+        %% Ensure the `get` command is followed by a config file describing type of environment
+        %% to create
         {"get", undefined} ->
             lager:error("The get command requires a harness to be specified");
-        {"get", Harness } ->
+        {"get", EnvFile } ->
             ok = sb:set_config(command, get),
-            ok = sb:set_config(command_arg, Harness);
+            ok = sb:set_config(command_args, EnvFile);
         {"list", _A} ->
             ok = sb:set_config(command, list);
         {NoneCommand, _A} ->
@@ -176,11 +186,37 @@ command_line_options () ->
     %% Option Name, Short Code, Long Code, Argument Spec, Help Message
     [
      {help, $h, "help", undefined, "Show available commands"},
-     {vm, $i, "vm", {string, "vbox"},
-      "Specify the virtual machine interface to use [vbox (default) | tbd]"},
+
+     {vm, $i, "vm", {atom, vbox},
+         "Specify the virtual machine interface to use [vbox (default) | tbd]"},
+
      {debug, $d, "debug", undefined, "Print extra debug output"},
-     {config_file, $f, "config_file", {string, "~/.stableboy"},
-      "Config file to use (defaults to ~/.stableboy)"},
+
+     {config_file, $f, "config_file", {string, filename:join([os:getenv("HOME"), ".stableboy"])},
+          "Config file to use (defaults to .stableboy then ~/.stableboy)"},
+
+     {count, $n, "count", {integer, 1}, "The number of harnesses to return (used for 'get' command)"},
+
      {cmd, undefined, undefined, string, "The command to run [list|get|tbd]"}
     ].
+
+
+%%
+%% Command Runner
+%%
+
+%% Entry point for the command being run
+run_command() ->
+    Command = sb:get_config(command),
+    CommandArgs = sb:get_config(command_args, undefined),
+    lager:debug("Running command: ~p with args: ~p", [Command, CommandArgs]),
+
+    % Run the command against the proper backend
+    Backend = sb:get_config(vm),
+    lager:debug("Using vm backend: ~p", [Backend]),
+
+    % Call the function associated with the command name
+    %   in the case of calling ./stableboy list this will call vbox:list()
+    ok = Backend:Command().
+
 
