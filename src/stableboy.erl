@@ -33,14 +33,10 @@ main (Args) ->
     load_all_deps(),
 
     %% Start lager application
-    start_dep(lager),
+    start_lager(),
 
     %% parse command line options
     {ok, {Options, NonOptionArgs}} = parse_options(Args),
-
-    %% TODO: remove debug trace
-    lager:set_loglevel(lager_console_backend,debug),
-    print_command_line(Options, NonOptionArgs),
 
     %% set flags
     set_flags(Options, NonOptionArgs),
@@ -61,20 +57,17 @@ add_deps (Path) ->
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
     ok.
 
-
 %% get a list of all dependencies
 load_all_deps () ->
     %% send this_script/deps directory
     add_deps(filename:join(filename:dirname(escript:script_name()), "deps")).
 
-%% Start up any dependencies that need starting
-start_dep (App) ->
-    case application:start(App) of
-        ok ->
-            ok;
-        {error, {already_started, _}} ->
-            ok
-    end.
+%% Special handling of lager startup
+start_lager() ->
+    application:load(lager),
+    application:set_env(lager, handlers, [{lager_console_backend, error}]),
+    application:start(lager).
+
 
 %%
 %% Command Line Option Handling
@@ -91,20 +84,9 @@ parse_options (Args) ->
     end.
 
 
-print_command_line(Options, NonOptionArgs) ->
-    lager:debug("Command line options: ~p", [Options]),
-    lager:debug("Additional args: ~p", [NonOptionArgs]).
-
-
 set_flags(Options, NonOptionArgs) ->
     %% Cycle through flags and call handler functions
     %% foreach Flag in the properly list, call Flag()
-
-    %% Debug tracing
-    Fun = fun(Setting) -> lager:debug("Setting: ~p and Value: ~p", [Setting, proplists:get_value(Setting, Options)]) end,
-    [Fun(KeyFun) || KeyFun <- proplists:get_keys(Options)],
-
-    %% handler calls
     [?MODULE:KeyFun([proplists:get_value(KeyFun, Options)], NonOptionArgs) || KeyFun <- proplists:get_keys(Options)].
 
 
@@ -127,7 +109,6 @@ help (Args, _N) ->
 
 %% -d or --debug
 debug (_A, _N) ->
-    lager:debug("This should not print if the proper trace statements have been removed"),
     lager:set_loglevel(lager_console_backend, debug),
     lager:debug("Debug output enabled").
 
@@ -216,7 +197,15 @@ run_command() ->
     lager:debug("Using vm backend: ~p", [Backend]),
 
     % Call the function associated with the command name
-    %   in the case of calling ./stableboy list this will call vbox:list()
-    ok = Backend:Command().
+    %   in the case of calling ./stableboy list (with vm=vbox as the default)
+    %   this will call vbox:list()
+    case CommandArgs of
+        undefined ->
+            Backend:Command();
+        _Anything  ->
+            Backend:Command(CommandArgs)
+    end.
+
+
 
 

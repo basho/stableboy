@@ -1,0 +1,22 @@
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ft=erlang ts=4 sw=4 et
+
+{vms,
+ [
+  { "ubuntu-1104-64-1", ubuntu, [11,0,4], 64},
+  { "ubuntu-1104-64-2", ubuntu, [11,0,4], 64},
+  { "ubuntu-1004-64-1", ubuntu, [10,0,4], 64},
+  { "ubuntu-1004-32-1", ubuntu, [10,0,4], 32},
+  { "centos-57-64-1", rhel, [5,7,0], 64}
+ ]}.
+
+{vm_info,
+ [
+  { "ubuntu-1104-64-1", "192.168.1.100", 22, "root", "r00tpass"},
+  { "ubuntu-1104-64-2", "192.168.1.101", 22, "root", "r00tpass"},
+  { "ubuntu-1004-64-1", "192.168.1.102", 22, "root", "r00tpass"},
+  { "ubuntu-1004-32-1", "192.168.1.103", 22, "root", "r00tpass"},
+  { "centos-57-64-1", "192.168.1.104", 22, "root", "r00tpass"}
+ ]}.
+
+
