@@ -1,6 +1,33 @@
 %% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
 %% ex: ft=erlang ts=4 sw=4 et
 
+%% vms
+%% This is needed for *all* backends to associate vm name with searchable
+%% environment parameters.
+%%
+%% This does not have to be a complete set of all VM's on the system.
+%% So, if you want to limit stableboy to just a few VM's, list only those
+%% here.
+%%
+%% If you are using one of the backends that supports the `--count`
+%% feature, you might end up with more VM's than are listed here
+%% due to dynamic cloning.
+%%
+%% For example:
+%% If you have the following vms list
+%% {vms,
+%%  [{ "mike", ubuntu, [10,0,4], 64},
+%%   { "smelly", rhel, [5,7,0], 64},
+%%   { "melvin", fedora, [15,0,0], 32},
+%%   { "hefe", rhel, [6,1,0], 64}
+%% ]}.
+%%
+%% And you requested an Ubuntu 64 machine through the env file (See README.md)
+%% with a `--count` of 5, your actual system will end up with a listing of VM
+%% names like [mike, mike-1, mike-2, mike-3, mike-4]
+%%
+%% Format:
+%% { <"vm_name">, <platform>, <version as [major, minor, bug]>, <arch (64|32)> }
 {vms,
  [
   { "ubuntu-1104-64-1", ubuntu, [11,0,4], 64},
@@ -10,6 +37,14 @@
   { "centos-57-64-1", rhel, [5,7,0], 64}
  ]}.
 
+
+%% vm_info
+%% This is only needed for the `file` backend.  It is the data returned
+%% to the caller when requesting a VM.  If you use this, you should *not*
+%% have a separate `vm_user` and `vm_pass` setting.
+%% The vm_name **must** match those in the `vms` list.
+%% Format:
+%% { <"vm_name">, <"ip_address">, <ssh port>, <"user">, <"password"> }
 {vm_info,
  [
   { "ubuntu-1104-64-1", "192.168.1.100", 22, "root", "r00tpass"},
@@ -20,3 +55,17 @@
  ]}.
 
 
+
+%% vm_user
+%% This is needed for all backends except the `file` backend which specifies
+%% usernames on a per-VM case in the `vm-info` setting.
+%% All VM's must have the same user account, and should in most every case
+%% be `root`
+{vm_user, "root"}.
+
+
+%% vm_pass
+%% Like the `vm_user` setting, this is needed for all backends besides `file`
+%% All VM's must have the same password for the `vm_user` account as
+%% is the case with systems like vagrant
+{vm_pass, "r00tpassword"}.
