@@ -168,8 +168,8 @@ command_line_options () ->
     [
      {help, $h, "help", undefined, "Show available commands"},
 
-     {vm, $i, "vm", {atom, vbox},
-         "Specify the virtual machine interface to use [vbox (default) | tbd]"},
+     {vm, $i, "vm", {atom, sb_file},
+         "Specify the virtual machine interface to use [sb_file(default)|sb_vbox|tbd]"},
 
      {debug, $d, "debug", undefined, "Print extra debug output"},
 
@@ -197,8 +197,8 @@ run_command() ->
     lager:debug("Using vm backend: ~p", [Backend]),
 
     % Call the function associated with the command name
-    %   in the case of calling ./stableboy list (with vm=vbox as the default)
-    %   this will call vbox:list()
+    %   in the case of calling ./stableboy list (with vm=sb_file as the default)
+    %   this will call sb_file:list()
     case CommandArgs of
         undefined ->
             Backend:Command();

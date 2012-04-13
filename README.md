@@ -68,20 +68,20 @@ $ ./stableboy --count 4 get ubuntu-vm.config
 
 If the number of VM's requested isn't available, an `{error, Reason}` tuple will be returned. You will not get a partial list of Vm's.
 
-Multi-get is only supported by the `vbox` backend currently.
+Multi-get is only supported by the `sb_vbox` backend currently.
 
 
 ## Backends
 
 Stableboy supports more than one way to get VM's. I'm referring to the different ways as 'backends' for lack of a better term.
 
-### File (file)
+### File (sb_file)
 
-The one that will get you up and running the fastest, but also the least powerful, is the `file` backend.  Currently, this is the default backend.   The `priv/stableboy_sample_config` has a section describing the settings needed for the `file` backend.
+The one that will get you up and running the fastest, but also the least powerful, is the `sb_file` backend.  Currently, this is the default backend.   The `priv/stableboy_sample_config` has a section describing the settings needed for the `sb_file` backend.
 
 #### What *Is* Supported
 
-The file backend doesn't do much, it can list out your available VM's and get a single VM by name or by description (both described above in the **Get** section.
+The sb_file backend doesn't do much, it can list out your available VM's and get a single VM by name or by description (both described above in the **Get** section.
 
 #### What *Is Not* Supported
 
@@ -92,15 +92,15 @@ It does nothing smart with those VM's, so it will just do a simple lookup for yo
 1. No `--count` parameter usage
 
 
-### Virtualbox (vbox)
+### Virtualbox (sb_vbox)
 
-At least initially, this will be the most common backend to use and will have the biggest feature set.  See the `priv/stableboy_sample_config` for the settings that are needed for the `vbox` backend.
+At least initially, this will be the most common backend to use and will have the biggest feature set.  See the `priv/stableboy_sample_config` for the settings that are needed for the `sb_vbox` backend.
 
 #### What *Is* Supported
 
-You can `list` your VM's, but like the `file` backend, this will only list the VM's in your `vms` list in your `.stableboy` config file as well as any dynamic clones created when using the `--count` option.
+You can `list` your VM's, but like the `sb_file` backend, this will only list the VM's in your `vms` list in your `.stableboy` config file as well as any dynamic clones created when using the `--count` option.
 
-`get` is also supported, and like the `file` backend, it follows the pattern as described in the **Get** section above.  Unlike the `file` backend though, the `vbox` backend does support the use of `--count`.  If requesting a `--count 5` of a certain type of VM, it will clone that VM into `count - 1` clones and return the information on the original VM and the clones.
+`get` is also supported, and like the `sb_file` backend, it follows the pattern as described in the **Get** section above.  Unlike the `file` backend though, the `sb_vbox` backend does support the use of `--count`.  If requesting a `--count 5` of a certain type of VM, it will clone that VM into `count - 1` clones and return the information on the original VM and the clones.
 
 #### Future / TODO
 
@@ -109,13 +109,13 @@ You can `list` your VM's, but like the `file` backend, this will only list the V
 
 #### Gotchas or Known Issues
 
-You **cannot** use Bridged Networking for your virtualbox VM's.  There is no good way to retrieve the IP address of VM's in that case.   If you need Bridged Networking, try using the `file` backend and specify your IP addresses manually.  For a description of networking types supported in VirtualBox, see [the manual](https://www.virtualbox.org/manual/ch06.html).
+You **cannot** use Bridged Networking for your virtualbox VM's.  There is no good way to retrieve the IP address of VM's in that case.   If you need Bridged Networking, try using the `sb_file` backend and specify your IP addresses manually.  For a description of networking types supported in VirtualBox, see [the manual](https://www.virtualbox.org/manual/ch06.html).
 
 
 ## Optional Flags
 
 ### --vm or -i
-Currently this defaults to `file`.  This will in the future be used to support different backends such as SmartOS (KVM)
+Currently this defaults to `sb_file`.  This will in the future be used to support different backends such as SmartOS (KVM)
 
 ### --debug or -d
 Print a **lot** of debug output.

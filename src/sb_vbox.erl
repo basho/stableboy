@@ -18,7 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 
--module(vbox).
+-module(sb_vbox).
 -behaviour(stableboy_vm_backend).
 
 -export([list/0, get/1, snapshot/1, rollback/1]).
@@ -27,7 +27,7 @@
 %% List the available VM's
 %% TODO: Make dynamic, fetching a list from VirtualBox
 list () ->
-    lager:debug("In vbox:list"),
+    lager:debug("In sb_vbox:list"),
 
     % pseudo dynamic method
     %    Output = os:cmd("vboxmanage list vms"),
@@ -49,7 +49,7 @@ get (Args) ->
     % Name will be either the file name or the VM name
     [Name|_] = Args,
 
-    lager:debug("In vbox:get with args: ~p", [Name]),
+    lager:debug("In sb_vbox:get with args: ~p", [Name]),
 
     % Get the static listing of IP/User/Pass info
     % will be the stableboy config file
@@ -64,11 +64,11 @@ get (Args) ->
 
 %% TODO: Do this
 snapshot (Args) ->
-    lager:debug("In vbox:snapshot with args: ~p and ~p", [Args]),
+    lager:debug("In sb_vbox:snapshot with args: ~p and ~p", [Args]),
     ok.
 
 %% TODO: Do this
 rollback (Args) ->
-    lager:debug("In vbox:rollback with args: ~p and ~p", [Args]),
+    lager:debug("In sb_vbox:rollback with args: ~p and ~p", [Args]),
     ok.
 

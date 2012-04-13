@@ -39,7 +39,7 @@
 
 
 %% vm_info
-%% This is only needed for the `file` backend.  It is the data returned
+%% This is only needed for the `sb_file` backend.  It is the data returned
 %% to the caller when requesting a VM.  If you use this, you should *not*
 %% have a separate `vm_user` and `vm_pass` setting.
 %% The vm_name **must** match those in the `vms` list.
@@ -57,7 +57,7 @@
 
 
 %% vm_user
-%% This is needed for all backends except the `file` backend which specifies
+%% This is needed for all backends except the `sb_file` backend which specifies
 %% usernames on a per-VM case in the `vm-info` setting.
 %% All VM's must have the same user account, and should in most every case
 %% be `root`
@@ -65,7 +65,7 @@
 
 
 %% vm_pass
-%% Like the `vm_user` setting, this is needed for all backends besides `file`
+%% Like the `vm_user` setting, this is needed for all backends besides `sb_file`
 %% All VM's must have the same password for the `vm_user` account as
 %% is the case with systems like vagrant
 {vm_pass, "r00tpassword"}.
