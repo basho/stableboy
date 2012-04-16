@@ -49,7 +49,7 @@ get (Args) ->
 
     % Return result straight away for now, with multiple
     % counts this will be a list-comprehension
-    io:format("~p~n", SearchResult),
+    io:format("~p.~n", SearchResult),
 
     ok.
 

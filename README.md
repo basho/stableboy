@@ -122,7 +122,3 @@ Print a **lot** of debug output.
 
 ### --config_file or -f
 Use an alternate stableboy config file besides ~/.stableboy
-
-
-
-
