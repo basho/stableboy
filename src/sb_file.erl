@@ -53,17 +53,29 @@ get (Args) ->
 get_by_file (Args) ->
     lager:debug("In sb_file:get_by_file with args: ~p", Args),
 
-    %% Read in environment config file
+    % Read in environment config file
     case file:consult(Args) of
-        {ok, Terms} ->
+        {ok, Properties} ->
 
+            VMList = sb:get_config(vms),
             VMInfo = sb:get_config(vm_info),
             Count = sb:get_config(count),
 
-            %% attempt to match the terms in the file with available VM's
-            case sb_vm_common:match_by_terms(VMInfo, Terms, Count) of
+            %% attempt to match the properties in the file with available VM's
+            case sb_vm_common:match_by_props(VMList, Properties, Count) of
                 {ok, SearchResult} ->
-                    sb_vm_common:print_result(SearchResult),
+                    % The search results come back as the <vms> structure and
+                    % and needs to be of the form of vm_info
+                    % so translate each using match_by_name
+                    lager:debug("get_by_file: SearchResult: ~p", [SearchResult]),
+                    PrintResult = fun(SearchRes) ->
+                                          % Get the name out
+                                          {ok, MBNRes} = sb_vm_common:match_by_name(VMInfo, element(1, SearchRes)),
+                                          sb_vm_common:print_result(MBNRes)
+                                  end,
+
+                    % Print each result we got back
+                    lists:foreach(PrintResult, SearchResult),
                     ok;
                 {error, Reason} ->
                     lager:error("Unable to get VM: ~p", [Reason])
@@ -76,10 +88,7 @@ get_by_file (Args) ->
 
 
 %% Search the VM list by name, Ex: get "ubuntu-1104-64"
-get_by_name (Args) ->
-    % Name will be either the file name or the VM name
-    [Name|_] = Args,
-
+get_by_name ([Name]) ->
     lager:debug("In sb_file:get_by_name with args: ~p", [Name]),
 
     % Get the static listing of IP/User/Pass info
