@@ -139,13 +139,17 @@ cmd (Command, Args) ->
     case {Com, Args} of
         %% Ensure the `get` command is followed by a config file describing type of environment
         %% to create
-        {"get", undefined} ->
-            lager:error("The get command requires a harness to be specified");
+        {"get", []} ->
+            lager:error("The get command requires environment file or harness name to be specified"),
+            halt(1);
         {"get", EnvFile } ->
             ok = sb:set_config(command, get),
             ok = sb:set_config(command_args, EnvFile);
-        {"list", _A} ->
+        {"list", _} ->
             ok = sb:set_config(command, list);
+        {"help", _} ->
+            show_usage(),
+            halt(0);
         {NoneCommand, _A} ->
             lager:error("Command ~p not found", [NoneCommand]),
             show_usage(),
@@ -155,7 +159,25 @@ cmd (Command, Args) ->
 
 %% show help
 show_usage () ->
-    getopt:usage(command_line_options(),"stableboy").
+    getopt:usage(command_line_options(),"stableboy", "[command options...]",
+                 [{"---",  "------------------------------"},
+                  {"",     "Detailed command descriptions:"},
+                  {"---",  "------------------------------"},
+                  {"help", "This usage page"},
+                  {"---",  "---"},
+                  {"list", "Lists the available VM's.  This can mean different things"},
+                  {"",     "for different backends so be sure to check the documentation"},
+                  {"",     "for each backend."},
+                  {"---",  "---"},
+                  {"get",  "<'harness/machine name' | 'path-to-environment-file'>"},
+                  {"",     "Get returns a list of machines and their login credentials"},
+                  {"",     "in the form of: "},
+                  {"",     "  {'name', 'ip', port, 'user', 'password'}"},
+                  {"",     " "},
+                  {"",     "Get requires you pass in a matching machine name (found with 'list')"},
+                  {"",     "or you can pass in an environment file describing what type"},
+                  {"",     "of machine you need.  See github/basho/basho_harness for an example."}
+                 ]).
 
 
 %%
@@ -178,7 +200,7 @@ command_line_options () ->
 
      {count, $n, "count", {integer, 1}, "The number of harnesses to return (used for 'get' command)"},
 
-     {cmd, undefined, undefined, string, "The command to run [list|get|tbd]"}
+     {cmd, undefined, undefined, string, "The command to run [get|list|help]"}
     ].
 
 
