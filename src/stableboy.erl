@@ -159,6 +159,7 @@ cmd (Command, Args) ->
 
 %% show help
 show_usage () ->
+    % abusing getopt syntax for fun and profit
     getopt:usage(command_line_options(),"stableboy", "[command options...]",
                  [{"---",  "------------------------------"},
                   {"",     "Detailed command descriptions:"},
