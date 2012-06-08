@@ -1,7 +1,7 @@
 .PHONY: deps
 
 all: deps compile
-	@./rebar escriptize
+	@./rebar escriptize skip_deps=true
 
 deps:
 	@./rebar get-deps
