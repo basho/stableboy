@@ -28,10 +28,6 @@
 
 %% Entry point for escript
 main (Args) ->
-
-    %% Add all deps to the run path
-    load_all_deps(),
-
     %% Start lager application
     start_lager(),
 
@@ -50,17 +46,6 @@ main (Args) ->
 %%
 %% Escript Boostrap
 %%
-
-%% add dependencies to path
-add_deps (Path) ->
-    {ok, Deps} = file:list_dir(Path),
-    [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
-    ok.
-
-%% get a list of all dependencies
-load_all_deps () ->
-    %% send this_script/deps directory
-    add_deps(filename:join(filename:dirname(escript:script_name()), "deps")).
 
 %% Special handling of lager startup
 start_lager() ->
