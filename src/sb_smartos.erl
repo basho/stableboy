@@ -37,6 +37,7 @@
 -export([list/0, get/1, snapshot/1, rollback/1]).
 -define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias tags; done").
 
+%% @doc Lists all available VMs with platform/version/architecture information.
 list() ->
     lager:debug("In sb_smartos:list/0"),
     case gzcommand(?LISTCMD, fun format_list/1) of
@@ -47,6 +48,7 @@ list() ->
     end,
     ok.
 
+%% @doc Gets login information about VMs by name or by file.
 get(Args) ->
     lager:debug("In sb_smartos:get/1"),
     case filelib:is_file(hd(Args)) of
@@ -56,10 +58,12 @@ get(Args) ->
             ok = get_by_name(Args)
     end.
 
+%% @doc Snapshot a VM(s), not yet implemented.
 snapshot(_Args) ->
     lager:debug("In sb_smartos:snapshot/1"),
     ok.
 
+%% @doc Rollback a VM(s), not yet implemented.
 rollback(_Args) ->
     lager:debug("In sb_smartos:rollback/1"),
     ok.
@@ -68,7 +72,7 @@ rollback(_Args) ->
 %% Internal functions
 %%-------------------
 
-%% Executes a command in the global zone via SSH.
+%% @doc Executes a command in the global zone via SSH.
 gzcommand(Command, Callback) ->
     Host = sb:get_config(vm_host),
     Port = sb:get_config(vm_port, 22),
@@ -92,10 +96,12 @@ gzcommand(Command, Callback) ->
             {error, Reason}
     end.
 
+%% @doc Makes sure the SSH applicaiton is started.
 start_ssh() ->
     application:start(crypto),
     application:start(ssh).
 
+%% @doc Gets a VM(s) by the constraints given in the file.
 get_by_file(Args) ->
     lager:debug("In sb_smartos:get_by_file with args: ~p", Args),
     % Read in environment config file
@@ -132,6 +138,7 @@ get_by_file(Args) ->
             {error, Reason}
     end.
 
+%% @doc Get a VM by name (alias).
 get_by_name([Alias|_Args]) ->
     Command = "vmadm get `vmadm lookup alias=" ++ Alias ++ "` | json -o json-0 alias nics tags",
     case gzcommand(Command, fun format_get/1) of
@@ -142,6 +149,7 @@ get_by_name([Alias|_Args]) ->
     end,
     ok.
 
+%% @doc Format output for the 'list' command into Erlang terms.
 format_list(Output) ->
     JSONToVM = fun({struct, JSON}) ->
                        Alias = binary_to_list(proplists:get_value(<<"alias">>, JSON)),
@@ -153,6 +161,7 @@ format_list(Output) ->
                end,
     [ JSONToVM(json2:decode(V)) || V <- re:split(Output, "\n", [{return, binary}, trim]) ].
 
+%% @doc Format output for the 'get' command into Erlang terms.
 format_get(Output) ->
     JSONToDetails = fun({struct, JSON}) ->
                             Alias = binary_to_list(proplists:get_value(<<"alias">>, JSON)),
@@ -168,5 +177,6 @@ format_get(Output) ->
                     end,
     [ JSONToDetails(json2:decode(V)) || V <- re:split(Output, "\n", [{return, binary}, trim]) ].
 
+%% @doc Converts a dot-delimited version string into a list of version integers.
 version_to_intlist(V) ->
     [ list_to_integer(P) || P <- re:split(V, "[.]", [{return,list},trim]) ].
