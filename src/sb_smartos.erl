@@ -32,7 +32,12 @@
 list() ->
     lager:debug("In sb_smartos:list/0"),
     Command = "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias tags; done",
-    gzcommand(Command, fun format_list/1),
+    case gzcommand(Command, fun format_list/1) of
+        {error, _Reason} -> %% TODO: print something?
+            ok;
+        VMs ->
+            sb_vm_common:print_result(VMs)
+    end,
     ok.
 
 get(Args) ->
@@ -68,8 +73,8 @@ gzcommand(Command, Callback) ->
         {ok, Connection} ->
             case ssh_cmd:run(Connection, Command) of
                 {ok, {_,StdOut,_}} ->
-                    Callback(StdOut),
-                    ssh:close(Connection);
+                    ssh:close(Connection),
+                    Callback(StdOut);
                 {error,{Code,_,StdErr}} ->
                     ssh:close(Connection),
                     lager:error("SSH Command failed with code ~p: ~p~n", [Code, StdErr]),
@@ -90,7 +95,12 @@ get_by_file(_Args) ->
 
 get_by_name([Alias|_Args]) ->
     Command = "vmadm get `vmadm lookup alias=" ++ Alias ++ "` | json -o json-0 alias nics tags",
-    gzcommand(Command, fun format_get/1),
+    case gzcommand(Command, fun format_get/1) of
+        {error, _Reason} -> %% TODO: print something?
+            ok;
+        VMs ->
+            sb_vm_common:print_result(VMs)
+    end,
     ok.
 
 format_list(Output) ->
@@ -102,8 +112,7 @@ format_list(Output) ->
                        Arch = list_to_integer(binary_to_list(proplists:get_value(<<"architecture">>, Tags))),
                        {Alias,Platform,Version,Arch}
                end,
-    VMs = [ JSONToVM(json2:decode(V)) || V <- re:split(Output, "\n", [{return, binary}, trim]) ],
-    sb_vm_common:print_result(VMs).
+    [ JSONToVM(json2:decode(V)) || V <- re:split(Output, "\n", [{return, binary}, trim]) ].
 
 format_get(Output) ->
     JSONToDetails = fun({struct, JSON}) ->
@@ -118,8 +127,7 @@ format_get(Output) ->
                             Port = 22,
                             {Alias,IP,Port,User,Password}
                     end,
-    VMs = [ JSONToDetails(json2:decode(V)) || V <- re:split(Output, "\n", [{return, binary}, trim]) ],
-    sb_vm_common:print_result(VMs).
+    [ JSONToDetails(json2:decode(V)) || V <- re:split(Output, "\n", [{return, binary}, trim]) ].
 
 version_to_intlist(V) ->
     [ list_to_integer(P) || P <- re:split(V, "[.]", [{return,list},trim]) ].
