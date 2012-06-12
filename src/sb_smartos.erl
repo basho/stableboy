@@ -35,7 +35,8 @@
 -behaviour(stableboy_vm_backend).
 
 -export([list/0, get/1, snapshot/1, rollback/1]).
--define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias tags; done").
+-define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias nics tags; done").
+-define(STARTCMD(Alias), "vmadm lookup state=stopped alias=\"" ++ Alias ++ "\" | xargs -n1 vmadm start").
 
 %% @doc Lists all available VMs with platform/version/architecture information.
 list() ->
@@ -72,7 +73,15 @@ rollback(_Args) ->
 %% Internal functions
 %%-------------------
 
-%% @doc Executes a command in the global zone via SSH.
+%% @doc Executes a command in the global zone via SSH and returns the
+%% shell output.
+%% @equiv gzcommand(Command, fun format_identity/1)
+gzcommand(Command) ->
+    gzcommand(Command, fun format_identity/1).
+
+%% @doc Executes a command in the global zone via SSH. The Callback is
+%% called with the stdout stream so that the data can be formatted
+%% before being returned.
 gzcommand(Command, Callback) ->
     Host = sb:get_config(vm_host),
     Port = sb:get_config(vm_port, 22),
@@ -104,29 +113,32 @@ start_ssh() ->
 %% @doc Gets a VM(s) by the constraints given in the file.
 get_by_file(Args) ->
     lager:debug("In sb_smartos:get_by_file with args: ~p", Args),
-    % Read in environment config file
+                                                % Read in environment config file
     case file:consult(Args) of
         {ok, Properties} ->
-            VMList = gzcommand(?LISTCMD, fun format_list/1),
-
-            Command = "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias nics tags; done",
-            VMInfo = gzcommand(Command, fun format_get/1),
+            RawVMList = gzcommand(?LISTCMD),
+            VMList = format_list(RawVMList),
+            VMInfo = format_get(RawVMList),
             Count = sb:get_config(count),
 
             %% attempt to match the properties in the file with available VM's
             case sb_vm_common:match_by_props(VMList, Properties, Count) of
                 {ok, SearchResult} ->
-                    % The search results come back as the <vms> structure and
-                    % and needs to be of the form of vm_info
-                    % so translate each using match_by_name
+                                                % The search results come back as the <vms> structure and
+                                                % and needs to be of the form of vm_info
+                                                % so translate each using match_by_name
                     lager:debug("get_by_file: SearchResult: ~p", [SearchResult]),
+
+                    %% Start the VMs if they aren't already.
+                    [ gzcommand(?STARTCMD(VM), fun started_vm/1) || {VM,_,_,_} <- SearchResult ],
+
                     PrintResult = fun(SearchRes) ->
-                                          % Get the name out
+                                                % Get the name out
                                           {ok, MBNRes} = sb_vm_common:match_by_name(VMInfo, element(1, SearchRes)),
                                           sb_vm_common:print_result(MBNRes)
                                   end,
 
-                    % Print each result we got back
+                                                % Print each result we got back
                     lists:foreach(PrintResult, SearchResult),
                     ok;
                 {error, Reason} ->
@@ -145,6 +157,7 @@ get_by_name([Alias|_Args]) ->
         {error, _Reason} -> %% TODO: print something?
             ok;
         VMs ->
+            gzcommand(?STARTCMD(Alias), fun started_vm/1),
             sb_vm_common:print_result(VMs)
     end,
     ok.
@@ -176,6 +189,14 @@ format_get(Output) ->
                             {Alias,IP,Port,User,Password}
                     end,
     [ JSONToDetails(json2:decode(V)) || V <- re:split(Output, "\n", [{return, binary}, trim]) ].
+
+%% @doc Don't format anything.
+format_identity(Output) ->
+    Output.
+
+%% @doc Callback for result of starting a VM
+started_vm(Output) ->
+    lager:debug("Started VM! ~s", [Output]).
 
 %% @doc Converts a dot-delimited version string into a list of version integers.
 version_to_intlist(V) ->
