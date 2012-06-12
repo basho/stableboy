@@ -28,11 +28,11 @@
 -behaviour(stableboy_vm_backend).
 
 -export([list/0, get/1, snapshot/1, rollback/1]).
+-define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias tags; done").
 
 list() ->
     lager:debug("In sb_smartos:list/0"),
-    Command = "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias tags; done",
-    case gzcommand(Command, fun format_list/1) of
+    case gzcommand(?LISTCMD, fun format_list/1) of
         {error, _Reason} -> %% TODO: print something?
             ok;
         VMs ->
@@ -42,7 +42,7 @@ list() ->
 
 get(Args) ->
     lager:debug("In sb_smartos:get/1"),
-    case filelib:is_file(Args) of
+    case filelib:is_file(hd(Args)) of
         true ->
             ok = get_by_file(Args);
         false ->
@@ -89,9 +89,41 @@ start_ssh() ->
     application:start(crypto),
     application:start(ssh).
 
-get_by_file(_Args) ->
-    %% TODO
-    ok.
+get_by_file(Args) ->
+    lager:debug("In sb_smartos:get_by_file with args: ~p", Args),
+    % Read in environment config file
+    case file:consult(Args) of
+        {ok, Properties} ->
+            VMList = gzcommand(?LISTCMD, fun format_list/1),
+
+            Command = "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias nics tags; done",
+            VMInfo = gzcommand(Command, fun format_get/1),
+            Count = sb:get_config(count),
+
+            %% attempt to match the properties in the file with available VM's
+            case sb_vm_common:match_by_props(VMList, Properties, Count) of
+                {ok, SearchResult} ->
+                    % The search results come back as the <vms> structure and
+                    % and needs to be of the form of vm_info
+                    % so translate each using match_by_name
+                    lager:debug("get_by_file: SearchResult: ~p", [SearchResult]),
+                    PrintResult = fun(SearchRes) ->
+                                          % Get the name out
+                                          {ok, MBNRes} = sb_vm_common:match_by_name(VMInfo, element(1, SearchRes)),
+                                          sb_vm_common:print_result(MBNRes)
+                                  end,
+
+                    % Print each result we got back
+                    lists:foreach(PrintResult, SearchResult),
+                    ok;
+                {error, Reason} ->
+                    lager:error("Unable to get VM: ~p", [Reason])
+            end;
+
+        {error, Reason} ->
+            lager:error("Failed to parse file: ~p with error: ~p", [Args, Reason]),
+            {error, Reason}
+    end.
 
 get_by_name([Alias|_Args]) ->
     Command = "vmadm get `vmadm lookup alias=" ++ Alias ++ "` | json -o json-0 alias nics tags",
