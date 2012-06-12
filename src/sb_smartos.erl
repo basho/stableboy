@@ -23,6 +23,13 @@
 %%
 %% Tags should be set on VM creation, or set via the `vmadm update`
 %% command.
+%%
+%% To get this working, I had to adjust the available SSH ciphers
+%% since Erlang only supports some less-secure ones, namely aes128-cbc
+%% and 3des-cbc. Add this line to the end of /etc/ssh/sshd_config in
+%% the global zone, and then run svcadm refresh ssh:
+%%
+%% Ciphers aes128-ctr,aes192-ctr,aes256-ctr,arcfour128,arcfour256,arcfour,aes128-cbc,3des-cbc
 
 -module(sb_smartos).
 -behaviour(stableboy_vm_backend).
