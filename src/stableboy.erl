@@ -21,31 +21,77 @@
 
 -export([main/1]).
 
-%% Exported so I can use apply()
-%% Don't call these
--export([help/2, vm/2, debug/2, cmd/2, config_file/2, count/2]).
-
-
-%% Entry point for escript
-main (Args) ->
-    %% Start lager application
+%% escript entry point
+main(Args) ->
     start_lager(),
+    case getopt:parse(cli_options(), Args) of
+        {ok, {Opts, CmdArgs}} ->
+            maybe_set_debug(Opts),
+            lager:debug("Parsed CLI:~n  options: ~p~n  args: ~p~n", [Opts, CmdArgs]),
+            case process_cli(Opts, CmdArgs) of
+                help ->
+                    help();
+                list ->
+                    list_vms();
+                {get, GetArgs} ->
+                    get_vms(GetArgs);
+                undefined ->
+                    io:format("ERROR: No command given!~n~n"),
+                    help(),
+                    halt(1)
+            end;
+        {error, Error} ->
+            io:format("Invalid option sequence given: ~p~n~n", [Error]),
+            help(),
+            halt(1)
+    end.
 
-    %% parse command line options
-    {ok, {Options, NonOptionArgs}} = parse_options(Args),
+cli_options() ->
+    %% Option Name, Short Code, Long Code, Argument Spec, Help Message
+    [
+     {help,        $h, "help",   undefined, "Print this usage page"},
+     {vm,          $i, "vm",     atom,      "Specify the virtual machine interface to use [sb_file(default)|sb_vbox|sb_smartos]"},
+     {debug,       $d, "debug",  undefined, "Print extra debug output"},
+     {config,      $f, "config", {string, filename:join([os:getenv("HOME"), ".stableboy"])},
+      "Config file to use (defaults to .stableboy then ~/.stableboy)"},
+     {count,       $n, "count", {integer, 1}, "The number of harnesses to return (used for 'get' command)"}
+    ].
 
-    %% set flags
-    set_flags(Options, NonOptionArgs),
+cli_args() ->
+    [{" "," "},
+     {"Commands:", " "},
+     {" ", " "},
+     {"help", "Print this usage page"},
+     {"list", "List the available VMs"},
+     {"get (<name>|<file>)",  "List matching VMs and their login credentials:"},
+     {" ", "  <name> for the named VM."},
+     {" ", "  <file> for VMs matching the Erlang terms in the named file."}].
 
-    %% run command
-    run_command(),
+%%------------------
+%% Commands
+%%------------------
 
-    ok.
+%% The 'help' command/switch
+help() ->
+    getopt:usage(cli_options(), escript:script_name(), "help | list | get (<name>|<file>)", cli_args()),
+    io:format("~nGiven configuration:~n~n~p~n", [application:get_all_env(stableboy)]).
+
+%% The 'list' command
+list_vms() ->
+    Backend = get_backend(),
+    lager:debug("Running command 'list'"),
+    Backend:list().
+
+%% The 'get' command
+get_vms(Args) ->
+    Backend = get_backend(),
+    lager:debug("Running command 'get' with args: ~p", [Args]),
+    Backend:get(Args).
 
 
-%%
-%% Escript Boostrap
-%%
+%%-----------------------------
+%% Internal functions
+%%-----------------------------
 
 %% Special handling of lager startup
 start_lager() ->
@@ -53,167 +99,83 @@ start_lager() ->
     application:set_env(lager, handlers, [{lager_console_backend, error}]),
     application:start(lager).
 
+%% Set the logging level at debug if the CLI flag is present, called
+%% before any real processing is done.
+maybe_set_debug(Opts) ->
+    case lists:member(debug, Opts) of
+        true -> lager:set_loglevel(lager_console_backend, debug);
+        _ -> ok
+    end.
 
-%%
-%% Command Line Option Handling
-%%
-
-%% Parse command line options given to escript
-parse_options (Args) ->
-    case getopt:parse(command_line_options(), Args) of
-        {ok, {Options, NonOptionArgs}}  ->
-            {ok, {Options, NonOptionArgs}};
-        {error, Error} ->
-            lager:error("Error parsing command line: ~p", [Error]),
+%% Get whatever VM backend was set
+get_backend() ->
+    Backend = sb:get_config(vm, sb_file),
+    case code:ensure_loaded(Backend) of
+        {module, _Mod} ->
+            lager:debug("Using vm backend ~p", [Backend]),
+            Backend;
+        {error, Reason} ->
+            lager:error("Error loading VM backend ~p: ~p~n", [Backend, Reason]),
             halt(1)
     end.
 
+%% Processes CLI options and non-option arguments
+process_cli(Opts, NonOptArgs) ->
+    process_cli(Opts, NonOptArgs, []).
 
-set_flags(Options, NonOptionArgs) ->
-    %% Cycle through flags and call handler functions
-    %% foreach Flag in the properly list, call Flag()
-    [?MODULE:KeyFun([proplists:get_value(KeyFun, Options)], NonOptionArgs) || KeyFun <- proplists:get_keys(Options)].
+process_cli([], Args, Result) ->
+    process_args(Args, Result);
+process_cli([H|T], Args, Result) ->
+    process_cli(T, Args, process_option(H, Args, Result)).
 
 
-%%
-%% Command handlers
-%%
-
-%% -i or --vm
-vm (Args, _N) ->
-    [VM|_] = Args,
-    lager:debug("In vm with args: ~p", [VM]),
-    lager:warning("Alternate VM backends not yet supported"),
-    sb:set_config(vm, VM).
-
-%% -h or --help
-help (Args, _N) ->
-    lager:debug("In help with args: ~p", Args),
-    show_usage(),
-    halt().
-
-%% -d or --debug
-debug (_A, _N) ->
-    lager:set_loglevel(lager_console_backend, debug),
-    lager:debug("Debug output enabled").
-
-%% -f or --config_file
-config_file(Args, _N) ->
-    lager:debug("In config_file with args: ~p", Args),
-    case sb:load_config(Args) of
-        ok ->
-            sb:set_config(config_file, Args);
-        {error, enoent} ->
-            lager:error("Config file ~p does not exist, exiting", Args),
-            halt(1);
-        {error, _} ->
-            lager:error("Cannot open config file, exiting"),
+%% Processes CLI options (flags)
+process_option(help, _Args, Result) ->
+    %% Always override the command!
+    NewResult = proplists:delete(command, Result),
+    [{command,help}|NewResult];
+process_option({vm,Backend}, _Args,Result) ->
+    %% Override the VM provider
+    NewResult = proplists:delete(vm, Result),
+    [{vm,Backend}|NewResult];
+process_option({config, Filename}, _Args, Result) ->
+    case sb:load_config(Filename) of
+        ok -> Result;
+        {error, _Reason} ->
             halt(1)
+    end;
+process_option({count, N},["get"|_], Result) ->
+    %% If the command is not 'get', we don't care about --count option
+    NewResult = proplists:delete(count, Result),
+    [{count, N}|NewResult];
+process_option(Option, _Args, Result) ->
+    %% Ignore anything else.
+    lager:debug("Ignoring option: ~p~n", [Option]),
+    Result.
+
+
+%% Processes non-option arguments.
+process_args([], Result) ->
+    [ sb:set_config(Key,Value) || {Key, Value} <- Result ],
+    proplists:get_value(command, Result);
+process_args(["get"|Extra], Result) ->
+    %% Don't override the 'help' flag
+    case proplists:is_defined(command, Result) of
+        true ->
+            process_args([], Result);
+        false ->
+            case Extra of
+                [] ->
+                    lager:error("The get command requires environment file or harness name to be specified"),
+                    halt(1);
+                _ ->
+                    process_args([], [{command, {get, Extra}}|Result])
+            end
+    end;
+process_args(["list"|_], Result) ->
+    case proplists:is_defined(command, Result) of
+        true ->
+            process_args([], Result);
+        false ->
+            process_args([], [{command, list}|Result])
     end.
-
-%% -n or --count
-count(Args, _N) ->
-    lager:debug("In count with args: '~p'", Args),
-    sb:set_config(count, Args).
-
-
-%% the verb to run
-cmd (Command, Args) ->
-    lager:debug("In cmd with command: ~p and args: ~p", [Command, Args]),
-    [Com|_] = Command,
-    case {Com, Args} of
-        %% Ensure the `get` command is followed by a config file describing type of environment
-        %% to create
-        {"get", []} ->
-            lager:error("The get command requires environment file or harness name to be specified"),
-            halt(1);
-        {"get", EnvFile } ->
-            ok = sb:set_config(command, get),
-            ok = sb:set_config(command_args, EnvFile);
-        {"list", _} ->
-            ok = sb:set_config(command, list);
-        {"help", _} ->
-            show_usage(),
-            halt(0);
-        {NoneCommand, _A} ->
-            lager:error("Command ~p not found", [NoneCommand]),
-            show_usage(),
-            halt(1)
-    end.
-
-
-%% show help
-show_usage () ->
-    % abusing getopt syntax for fun and profit
-    getopt:usage(command_line_options(),"stableboy", "[command options...]",
-                 [{"---",  "------------------------------"},
-                  {"",     "Detailed command descriptions:"},
-                  {"---",  "------------------------------"},
-                  {"help", "This usage page"},
-                  {"---",  "---"},
-                  {"list", "Lists the available VM's.  This can mean different things"},
-                  {"",     "for different backends so be sure to check the documentation"},
-                  {"",     "for each backend."},
-                  {"---",  "---"},
-                  {"get",  "<'harness/machine name' | 'path-to-environment-file'>"},
-                  {"",     "Get returns a list of machines and their login credentials"},
-                  {"",     "in the form of: "},
-                  {"",     "  {'name', 'ip', port, 'user', 'password'}"},
-                  {"",     " "},
-                  {"",     "Get requires you pass in a matching machine name (found with 'list')"},
-                  {"",     "or you can pass in an environment file describing what type"},
-                  {"",     "of machine you need.  See github/basho/basho_harness for an example."}
-                 ]).
-
-
-%%
-%% Getopt helpers
-%%
-
-%% available command line options
-command_line_options () ->
-    %% Option Name, Short Code, Long Code, Argument Spec, Help Message
-    [
-     {help, $h, "help", undefined, "Show available commands"},
-
-     {vm, $i, "vm", {atom, sb_file},
-         "Specify the virtual machine interface to use [sb_file(default)|sb_vbox|tbd]"},
-
-     {debug, $d, "debug", undefined, "Print extra debug output"},
-
-     {config_file, $f, "config_file", {string, filename:join([os:getenv("HOME"), ".stableboy"])},
-          "Config file to use (defaults to .stableboy then ~/.stableboy)"},
-
-     {count, $n, "count", {integer, 1}, "The number of harnesses to return (used for 'get' command)"},
-
-     {cmd, undefined, undefined, string, "The command to run [get|list|help]"}
-    ].
-
-
-%%
-%% Command Runner
-%%
-
-%% Entry point for the command being run
-run_command() ->
-    Command = sb:get_config(command),
-    CommandArgs = sb:get_config(command_args, undefined),
-    lager:debug("Running command: ~p with args: ~p", [Command, CommandArgs]),
-
-    % Run the command against the proper backend
-    Backend = sb:get_config(vm),
-    lager:debug("Using vm backend: ~p", [Backend]),
-
-    % Call the function associated with the command name
-    %   in the case of calling ./stableboy list (with vm=sb_file as the default)
-    %   this will call sb_file:list()
-    case CommandArgs of
-        undefined ->
-            Backend:Command();
-        _Anything  ->
-            Backend:Command(CommandArgs)
-    end.
-
-
-
-
