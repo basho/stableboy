@@ -158,6 +158,9 @@ process_option(Option, _Args, Result) ->
 process_args([], Result) ->
     [ sb:set_config(Key,Value) || {Key, Value} <- Result ],
     proplists:get_value(command, Result);
+process_args(["help"|_], Result) ->
+    NewResult = proplists:delete(command, Result),
+    process_args([], [{command,help}|NewResult]);
 process_args(["get"|Extra], Result) ->
     %% Don't override the 'help' flag
     case proplists:is_defined(command, Result) of
