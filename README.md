@@ -30,6 +30,9 @@ The format of the return value is:
 
 `{<name>, <platform>, <version>, <architecture>}`
 
+See the `brand` command for adding this information to specific VMs
+when using the sb_vbox or sb_smartos backends.
+
 ### Get
 
 To get access to one of these VM's, you can issue a `get` command.
@@ -64,6 +67,34 @@ $ ./stableboy list
 $ ./stableboy get "ubuntu-1104-64"
 {ok,"192.168.1.118",22,"root","root"}
 ```
+### Brand
+
+The `brand` command is used to associate the platform, version, and architecture
+information with the VM:
+
+```text
+$ ./stableboy brand ubuntu-1104-64 ubuntu:11.0.4:64
+```
+
+This tells the backend to store the platform, version, and architecture
+for the VM named "ubuntu-1104-64".
+
+The `list` command returns information about the VMs available. For the sb_file backend,
+the information comes from the configuration file. For sb_smartos and sb_vbox backends,
+which do not require the VMs to be listed in the configuration file, some or all of the
+information may need to be added to meta-data associated with the VM; this extra data
+allows the `list` command for these VM manager backends to extract the information
+dynamically.
+
+In addition, you can optionally add a username and password for the VM.
+
+```text
+$ ./stableboy brand ubuntu-1104-64 ubuntu:11.0.4:64:root:toor
+```
+
+If you don't specify the username and password, then make sure you
+set the global `vm_user` and `vm_pass` properties in the configuration
+file.
 
 #### Multi-Get (count)
 
@@ -76,6 +107,7 @@ $ ./stableboy --count 4 get ubuntu-vm.config
 {ok,"192.168.1.118",22,"root","root"}
 {ok,"192.168.1.119",22,"root","root"}
 {ok,"192.168.1.120",22,"root","root"}
+
 {ok,"192.168.1.121",22,"root","root"}
 ```
 
@@ -83,7 +115,6 @@ If the number of VM's requested isn't available, an `{error, Reason}`
 tuple will be returned. You will not get a partial list of Vm's.
 
 Multi-get is only supported by the `sb_vbox` backend currently.
-
 
 ## Backends
 

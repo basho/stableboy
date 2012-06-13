@@ -35,6 +35,8 @@ main(Args) ->
                     list_vms();
                 {get, GetArgs} ->
                     get_vms(GetArgs);
+                {brand, BrandArgs} ->
+                    brand_vm(BrandArgs);
                 undefined ->
                     io:format("ERROR: No command given!~n~n"),
                     help(),
@@ -65,7 +67,16 @@ cli_args() ->
      {"list", "List the available VMs"},
      {"get (<name>|<file>)",  "List matching VMs and their login credentials:"},
      {" ", "  <name> for the named VM."},
-     {" ", "  <file> for VMs matching the Erlang terms in the named file."}].
+     {" ", "  <file> for VMs matching the Erlang terms in the named file."},
+     {"brand <name> <platform:version:arch[:user:password]>",
+      "Set metadata for named VM (supported by non-sb_file backends)"},
+     {" ", " <name> of the named VM."},
+     {" ", " <platform> of VM, e.g. ubuntu, centos, fedora, osx."},
+     {" ", " <version> of VM, e.g. 12.04"},
+     {" ", " <arch> of VM, (32|64)."},
+     {" ", " <user> username for ssh login of VM."},
+     {" ", " <password> password for ssh login of VM."}
+    ].
 
 %%------------------
 %% Commands
@@ -79,6 +90,7 @@ help() ->
 %% The 'list' command
 list_vms() ->
     Backend = get_backend(),
+
     lager:debug("Running command 'list'"),
     Backend:list().
 
@@ -88,6 +100,11 @@ get_vms(Args) ->
     lager:debug("Running command 'get' with args: ~p", [Args]),
     Backend:get(Args).
 
+%% The 'brand' command
+brand_vm(Args) ->
+    Backend = get_backend(),
+    lager:debug("Running command 'brand' with args: ~p", [Args]),
+    Backend:brand(Args).
 
 %%-----------------------------
 %% Internal functions
@@ -173,6 +190,20 @@ process_args(["get"|Extra], Result) ->
                     halt(1);
                 _ ->
                     process_args([], [{command, {get, Extra}}|Result])
+            end
+    end;
+process_args(["brand"|Extra], Result) ->
+    %% Don't override the 'help' flag
+    case proplists:is_defined(command, Result) of
+        true ->
+            process_args([], Result);
+        false ->
+            case Extra of
+                [_Vm,_Meta] ->
+                    process_args([], [{command, {brand, Extra}}|Result]);
+                _ ->
+                    lager:error("The brand command requires a VM-name and metadata parameters."),
+                    halt(1)
             end
     end;
 process_args(["list"|_], Result) ->

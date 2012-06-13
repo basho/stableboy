@@ -21,7 +21,7 @@
 -module(sb_file).
 -behaviour(stableboy_vm_backend).
 
--export([list/0, get/1, snapshot/1, rollback/1]).
+-export([list/0, get/1, snapshot/1, rollback/1, brand/1]).
 
 
 %% List the available VM's
@@ -116,3 +116,8 @@ rollback (Args) ->
     lager:error("Rollback is not supported by the sb_file backend"),
     halt(1).
 
+%% Not supported by file backend
+brand (Args) ->
+    lager:debug("In sb_file:rollback with args: ~p and ~p", [Args]),
+    lager:error("brand is not supported by the sb_file backend"),
+    halt(1).
