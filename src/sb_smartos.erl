@@ -34,9 +34,10 @@
 -module(sb_smartos).
 -behaviour(stableboy_vm_backend).
 
--export([list/0, get/1, snapshot/1, rollback/1]).
+-export([list/0, get/1, snapshot/1, rollback/1, brand/1]).
 -define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias nics tags; done").
 -define(STARTCMD(Alias), "vmadm lookup state=stopped alias=\"" ++ Alias ++ "\" | xargs -n1 vmadm start").
+-define(BRANDCMD, "vmadm update `vmadm lookup alias=~s` -f ~s").
 
 %% @doc Lists all available VMs with platform/version/architecture information.
 list() ->
@@ -69,9 +70,28 @@ rollback(_Args) ->
     lager:debug("In sb_smartos:rollback/1"),
     ok.
 
+%% @doc Brands a VM with given metadata.
+brand([Alias, Meta]) ->
+    lager:debug("In sb_smartos:brand/1"),
+    Props = sb_vm_common:extract_branding(Meta),
+    Data = json2:encode({struct, [{set_tags, Props}]}),
+    Filename = json_temp_name(Alias),
+    lager:debug("Uploading JSON to ~s: ~s", [Filename, iolist_to_binary(Data)]),
+    gzupload(Filename, Data),
+    lager:debug("Setting tags on ~s", [Alias]),
+    Output = gzcommand(io_lib:format(?BRANDCMD, [Alias, Filename])),
+    lager:debug("Branding result: ~p", [Output]),
+    ok.
+
 %%-------------------
 %% Internal functions
 %%-------------------
+
+%% @doc Given a base name, generates a file that can be uploaded to in
+%% a temporary place.
+json_temp_name(Alias) ->
+    {Mega,Secs,Micros} = erlang:now(),
+    io_lib:format("/tmp/~s-~p~p~p.json", [Alias, Mega, Secs, Micros]).
 
 %% @doc Executes a command in the global zone via SSH and returns the
 %% shell output.
@@ -83,6 +103,31 @@ gzcommand(Command) ->
 %% called with the stdout stream so that the data can be formatted
 %% before being returned.
 gzcommand(Command, Callback) ->
+    with_connection(
+      fun(Connection) ->
+              case ssh_cmd:run(Connection, Command) of
+                  {ok, {_,StdOut,_}} ->
+                      Callback(StdOut);
+                  {error,{Code,_,StdErr}} ->
+                      lager:error("SSH Command failed with code ~p: ~p~n", [Code, StdErr]),
+                      {error, {Code, StdErr}}
+              end
+      end).
+
+%% @doc Writes data into the named file on the global zone.
+gzupload(Filename, Data) ->
+    with_connection(
+      fun(Conn) ->
+              case ssh_sftp:start_channel(Conn) of
+                  {ok, Channel} ->
+                      ssh_sftp:write_file(Channel, Filename, Data);
+                  Error -> Error
+              end
+      end).
+
+
+%% @doc Passes an SSH connection to the global zone to the Function.
+with_connection(Function) ->
     Host = sb:get_config(vm_host),
     Port = sb:get_config(vm_port, 22),
     User = sb:get_config(vm_user, "root"),
@@ -91,17 +136,11 @@ gzcommand(Command, Callback) ->
     lager:debug("Connecting to SmartOS GZ: ~s:~p ~s:~s", [Host, Port, User, Pass]),
     case ssh:connect(Host, Port,[{user,User},{password,Pass},{silently_accept_hosts,true}]) of
         {ok, Connection} ->
-            case ssh_cmd:run(Connection, Command) of
-                {ok, {_,StdOut,_}} ->
-                    ssh:close(Connection),
-                    Callback(StdOut);
-                {error,{Code,_,StdErr}} ->
-                    ssh:close(Connection),
-                    lager:error("SSH Command failed with code ~p: ~p~n", [Code, StdErr]),
-                    {error, {Code, StdErr}}
-            end;
+            Result = Function(Connection),
+            ssh:close(Connection),
+            Result;
         {error, Reason} ->
-            lager:error("SSH Command failed with reason: ~p~n", [Reason]),
+            lager:error("SSH connection failed with reason: ~p~n", [Reason]),
             {error, Reason}
     end.
 
