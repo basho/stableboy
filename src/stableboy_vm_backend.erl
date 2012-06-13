@@ -27,7 +27,8 @@ behaviour_info (callbacks) ->
      {list, 0},
      {get, 1},
      {snapshot, 1},
-     {rollback, 1}
+     {rollback, 1},
+     {brand, 1}
     ];
 
 behaviour_info (_Other) ->

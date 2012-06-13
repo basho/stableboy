@@ -198,15 +198,14 @@ process_args(["brand"|Extra], Result) ->
         true ->
             process_args([], Result);
         false ->
-            case length(Extra) of
-                2 ->
+            case Extra of
+                [_Vm,_Meta] ->
                     process_args([], [{command, {brand, Extra}}|Result]);
                 _ ->
                     lager:error("The brand command requires a VM-name and metadata parameters."),
                     halt(1)
             end
     end;
-    
 process_args(["list"|_], Result) ->
     case proplists:is_defined(command, Result) of
         true ->
