@@ -45,7 +45,7 @@ match_by_name(VMList, Name) ->
 match_by_props(VMList, Props) ->
     match_by_props(VMList, Props, 1).
 
-match_by_props(VMList, Props, [Count]) ->
+match_by_props(VMList, Props, Count) ->
     lager:debug("In sb_vm_common:match_by_props with Props: ~p and Count: ~p", [Props, Count]),
 
     %% Make sure we have a platform
