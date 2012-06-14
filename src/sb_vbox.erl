@@ -141,7 +141,7 @@ command(Command, Alias, Callback) ->
 %% been set by the user to describe their VM guest. For example, type
 %% vboxmanage setextradata myVmName sb_info ubuntu:12.04:64
 format_extra(Alias,Output) ->
-    Unknown = {Alias,unknown,[],unknown,unknown,unknown},
+    Unknown = {Alias,undefined,[],undefined,undefined,undefined},
     case re:split(Output, "[ \n]", [{return, list},trim]) of
         ["Value:",Xtra] ->
             case re:split(Xtra, "[:]", [{return, list},trim]) of
@@ -165,7 +165,7 @@ format_extra(Alias,Output) ->
 format_ipdata(Output) ->
     case re:split(Output, "[ \n]", [{return, list},trim]) of
         ["Value:",IP] -> IP;
-        _ -> unknown
+        _ -> undefined
     end.
 
 %% Find the SSH port, even when it's Port Forwarded
@@ -201,7 +201,7 @@ format_get(Output) ->
 %% @doc Get a VM by it's name
 get_vm(VM) ->
     case command(?GET_XDATA_CMD(VM), VM, fun format_extra/2) of
-        {_Alias, unknown, _, _, _, _} ->
+        {_Alias, undefined, _, _, _, _} ->
             Names = command(?LIST_CMD, fun format_names/1),
             Reason = case lists:member(VM, Names) of
                          true -> "it's not branded.";
