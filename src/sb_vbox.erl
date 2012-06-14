@@ -147,8 +147,7 @@ format_extra(Alias,Output) ->
                     {Alias,list_to_atom(OS),Vints,list_to_integer(Arch),none,none};
                 [OS,Vdotted,Arch,User,Pass] ->
                     Vints = version_to_intlist(Vdotted),
-                    {Alias,list_to_atom(OS),Vints,list_to_integer(Arch),
-                     list_to_atom(User),list_to_atom(Pass)};
+                    {Alias,list_to_atom(OS),Vints,list_to_integer(Arch),User,Pass};
                 _ ->
                     %% error msg?
                     io:format("sb_info failed: Xtra = ~p~n", [Xtra]),
@@ -168,7 +167,7 @@ format_ipdata(Output) ->
 %% Find the SSH port, even when it's Port Forwarded
 format_portdata(Output) ->
     case re:split(Output, "host port = ", [{return, list},trim]) of
-        [_First|Rest] ->
+        [First|Rest] when First /= [] ->
             [Port|_Other] = re:split(Rest, "[ ,\"]", [{return, list},trim]),
             list_to_integer(Port);
         _ ->
