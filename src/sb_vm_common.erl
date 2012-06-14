@@ -20,9 +20,8 @@
 
 -module(sb_vm_common).
 
-% Public api
--export([match_by_name/2, match_by_props/2, match_by_props/3, print_result/1]).
-
+%% Public api
+-export([match_by_name/2, match_by_props/2, match_by_props/3, print_result/1, extract_branding/1]).
 
 %% Public API
 
@@ -91,7 +90,10 @@ print_result(Results) ->
     lists:foreach( fun(T) -> io:format("~p.~n", [T]) end,
                    Results).
 
-
+%% Extract branding information from the CLI input for use in the VM backend.
+extract_branding(Meta) ->
+    extract_branding(re:split(Meta, ":", [{return, binary}]),
+                     [platform,version,architecture,user,password], []).
 
 %% Private functions
 
@@ -158,6 +160,9 @@ cmp_version ([A|_],[B|_]) when A > B -> gt;
 cmp_version ([A|_],[B|_]) when A < B -> lt;
 cmp_version ([A|As],[B|Bs]) when A == B -> cmp_version(As,Bs).
 
-
-
-
+extract_branding([], _, Acc) ->
+    lists:reverse(Acc);
+extract_branding(_, [], Acc) ->
+    lists:reverse(Acc);
+extract_branding([Value|Values],[Key|Keys], Acc) ->
+    extract_branding(Values, Keys, [{Key, Value}|Acc]).
