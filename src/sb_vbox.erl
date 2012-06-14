@@ -28,7 +28,7 @@
 -define(SET_XDATA_CMD(VM,META), "vboxmanage setextradata " ++ VM ++ " sb_info " ++ META).
 -define(GET_IPDATA_CMD(VM), "vboxmanage guestproperty get " ++ VM ++ " /VirtualBox/GuestInfo/Net/0/V4/IP").
 -define(GET_PORTDATA_CMD(VM), "vboxmanage showvminfo " ++ VM ++ " | egrep \"name = .*ssh,.*host port = \"").
--define(START_CMD(VM), "vboxmanage startvm" ++ VM).
+-define(START_CMD(VM), "vboxmanage startvm --type headless " ++ VM).
 
 %% List the available VM's
 list () ->
