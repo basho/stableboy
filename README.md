@@ -144,48 +144,91 @@ config file. So:
 1. No automatic rollback
 1. No `--count` parameter usage
 
-
 ### Virtualbox (sb_vbox)
 
-At least initially, this will be the most common backend to use and
-will have the biggest feature set.  See the
-`priv/stableboy_sample_config` for the settings that are needed for
-the `sb_vbox` backend.
+In order to use the virtual box backend, you will need to supply either
+the `-i sb_vbox` command argument to stableboy or add the `{vm, sb_vbox}`
+property to `priv/stableboy_sample_config`.
 
-#### What *Is* Supported
+The `sb_vbox` backend dynamically queries the VirtualBox Manager to see
+what VMs are installed for the `list` command. It also supports the `brand`
+command to allow you to annotate a VM with Platform, Architecture, and
+Username/Password information that is needed to support the `get` command.
+Then, `get` will also dynamically query the installed VMs. Note that you
+still have to install and register your own VMs with VirtualBox; but at
+least you don't have to maintain a list of these VMs in the stableboy
+configuration file. That means a cloned VM will show up automatically;
+and you won't have to re-brand that cloned VM.
 
-You can `list` your VM's, but like the `sb_file` backend, this will
-only list the VM's in your `vms` list in your `.stableboy` config file
-as well as any dynamic clones created when using the `--count` option.
+#### Install Guest Additions!
 
-`get` is also supported, and like the `sb_file` backend, it follows
-the pattern as described in the **Get** section above.  Unlike the
-`file` backend though, the `sb_vbox` backend does support the use of
-`--count`.  If requesting a `--count 5` of a certain type of VM, it
-will clone that VM into `count - 1` clones and return the information
-on the original VM and the clones.
+In addition, you will need to load the "guest additions" module to your
+virtual box install. See [Guest Additions manual](http://www.virtualbox.org/manual/ch04.html)
+for a detailed explanation. This addition is needed to allow sb_vbox to get
+the IP address dynamically so that you can create/clone your virtual
+machines any way you want.
 
-#### Future / TODO
+#### Port Rules
 
-1. Automatic rollback to last snapshot before getting a VM
-1. command for deletion of VM clones
+If you setup a port forwarding rule (e.g. for use with NAT'd networks),
+make sure you name your rule with the string `ssh` somewhere in it.
+sb_vbox looks for a rule with that string and extracts the forwarded
+port (if it finds one) as the returned public port for accessing the
+VM. For example, the most common documentation examples show the
+creation of a port forward rule called "guestssh" so that works great.
+With not port forwarding rules, the return port always defaults to 22.
+There is currently no way to know if ssh is configured to work on a
+different port. So use 22 or use a port forwarding rule.
 
-#### Gotchas or Known Issues
+#### Network Types
 
-You **cannot** use Bridged Networking for your virtualbox VM's.  There
-is no good way to retrieve the IP address of VM's in that case.  If
-you need Bridged Networking, try using the `sb_file` backend and
-specify your IP addresses manually.  For a description of networking
-types supported in VirtualBox, see
+Be aware that the IP address returned by `sb_vbox` is the one associated
+with the first NIC (adapter 0), so make sure that if you add multiple NICs,
+the first one is the one you want to use for stableboy's public interface.
+
+You can create any type of network: bridged, NAT'd, and internal. Of course,
+internal is not useful if that's your first NIC. Don't do that. Make your
+first NIC either bridged or NAT'd. If you use NAT, make sure you have a
+port forwarding rule for ssh as described above in Port Rules, otherwise
+your VMs are unreachable.
+
+For a description of networking types supported in VirtualBox, see
 [the manual](https://www.virtualbox.org/manual/ch06.html).
 
+#### What *Is Not* Supported
+
+Cloning via stableboy is not supported, so if `get` asks for more VMs than
+are available (via the `count` argument), then it will come up short.
+
+If you don't supply a Username and Password when you `brand` the VM, it
+will not return the default ones from the configuration file. That's a
+bug that needs to be fixed.
+
+### SMartOS (sb_smartos)
+
+The SmartOS (KVM) backend supports the same set of commands as the
+VirtualBox backed, which means you can use the exact same syntax for
+the `brand` command to annotate your VM without needing to know how
+it works.
+
+I'm not sure if it handles port forwarding rules, so for now it's
+best to ensure that port 22 is the public ssh port. The same applies
+with automatic cloning - not supported yet. Same rule about supplying
+Username/Password as `sb_vbox` as well.
+
+## Future / TODO
+
+1. Return default "global" Username/Password if branded pair isn't found.
+2. Automatic rollback to last snapshot before getting a VM
+3. Maybe support cloning.
+4. Command for deletion of VM clones
 
 ## Optional Flags
 
 ### --vm or -i
 
-Currently this defaults to `sb_file`.  This will in the future be used
-to support different backends such as SmartOS (KVM)
+Currently this defaults to `sb_file`. Other backends supported are
+SmartOS (via `-i sb_smartos`) and Virtual Box (via `-i sb_vbox`).
 
 ### --debug or -d
 
