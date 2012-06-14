@@ -58,10 +58,7 @@ get_by_file(Args) ->
         {ok, Properties} ->
             VMList = command(?LIST_CMD, fun format_list/1),
             VMInfo = command(?LIST_CMD, fun format_get/1),
-            Count = case sb:get_config(count) of
-                        [C] -> C;
-                        C -> [C]   %% I was getting a bad match on the match_by_props without this
-                    end,
+            Count = sb:get_config(count),
 
             %% attempt to match the properties in the file with available VM's
             case sb_vm_common:match_by_props(VMList, Properties, Count) of
