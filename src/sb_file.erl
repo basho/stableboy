@@ -21,14 +21,14 @@
 -module(sb_file).
 -behaviour(stableboy_vm_backend).
 
--export([list/0, get/1, snapshot/1, rollback/1, brand/1]).
+-export([list/1, get/1, snapshot/1, rollback/1, brand/2]).
 
 
 %% List the available VM's
 %%
 %% In the case of the sb_file backend, this should be in the stableboy
 %% config file that is read in at startup
-list () ->
+list(_) ->
     lager:debug("In sb_file:list"),
 
     VMS = sb:get_config(vms),
@@ -105,19 +105,19 @@ get_by_name ([Name]) ->
 
 
 %% Not supported by file backend
-snapshot (Args) ->
-    lager:debug("In sb_file:snapshot with args: ~p and ~p", [Args]),
+snapshot(Args) ->
+    lager:debug("In sb_file:snapshot with args: ~p", [[Args]]),
     lager:error("Snapshot is not supported by the sb_file backend"),
     halt(1).
 
 %% Not supported by file backend
-rollback (Args) ->
-    lager:debug("In sb_file:rollback with args: ~p and ~p", [Args]),
+rollback(Args) ->
+    lager:debug("In sb_file:rollback with args: ~p", [[Args]]),
     lager:error("Rollback is not supported by the sb_file backend"),
     halt(1).
 
 %% Not supported by file backend
-brand (Args) ->
-    lager:debug("In sb_file:rollback with args: ~p and ~p", [Args]),
+brand(Alias,Meta) ->
+    lager:debug("In sb_file:rollback with args: ~p", [[Alias, Meta]]),
     lager:error("brand is not supported by the sb_file backend"),
     halt(1).

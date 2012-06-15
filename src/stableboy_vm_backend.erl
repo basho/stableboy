@@ -24,11 +24,11 @@
 %% define the behavior for a VM backend
 behaviour_info (callbacks) ->
     [
-     {list, 0},
+     {list, 1},
      {get, 1},
      {snapshot, 1},
      {rollback, 1},
-     {brand, 1}
+     {brand, 2}
     ];
 
 behaviour_info (_Other) ->

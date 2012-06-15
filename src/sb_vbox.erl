@@ -21,7 +21,7 @@
 -module(sb_vbox).
 -behaviour(stableboy_vm_backend).
 
--export([list/0, get/1, snapshot/1, rollback/1, brand/1]).
+-export([list/1, get/1, snapshot/1, rollback/1, brand/2]).
 
 -define(LIST_CMD, "vboxmanage list vms").
 -define(GET_XDATA_CMD(VM), "vboxmanage getextradata " ++ VM ++ " sb_info").
@@ -31,7 +31,7 @@
 -define(START_CMD(VM), "vboxmanage startvm " ++ VM ++ " --type headless").
 
 %% List the available VM's
-list () ->
+list(_) ->
     lager:debug("In sb_vbox:list"),
     case command(?LIST_CMD, fun format_list/1) of
         VMs ->
@@ -107,7 +107,7 @@ rollback (Args) ->
 
 %% @doc Brands a VM with given metadata.
 %% vboxmanage setextradata dimplecup sb_info "ubuntu:12.04:64"
-brand([Alias, Meta]) ->
+brand(Alias, Meta) ->
     lager:debug("In sb_vbox:brand/1"),
     command(?SET_XDATA_CMD(Alias,Meta),
             fun(Output) -> lager:debug("Branding result: ~p", [Output]) end),

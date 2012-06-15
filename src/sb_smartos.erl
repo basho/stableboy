@@ -34,13 +34,13 @@
 -module(sb_smartos).
 -behaviour(stableboy_vm_backend).
 
--export([list/0, get/1, snapshot/1, rollback/1, brand/1]).
+-export([list/1, get/1, snapshot/1, rollback/1, brand/2]).
 -define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias nics tags; done").
 -define(STARTCMD(Alias), "vmadm lookup state=stopped alias=\"" ++ Alias ++ "\" | xargs -n1 vmadm start").
 -define(BRANDCMD, "vmadm update `vmadm lookup alias=~s` -f ~s").
 
 %% @doc Lists all available VMs with platform/version/architecture information.
-list() ->
+list(_) ->
     lager:debug("In sb_smartos:list/0"),
     case gzcommand(?LISTCMD, fun format_list/1) of
         {error, _Reason} -> %% TODO: print something?
@@ -71,7 +71,7 @@ rollback(_Args) ->
     ok.
 
 %% @doc Brands a VM with given metadata.
-brand([Alias, Meta]) ->
+brand(Alias, Meta) ->
     lager:debug("In sb_smartos:brand/1"),
     Props = sb_vm_common:extract_branding(Meta),
     Data = json2:encode({struct, [{set_tags, Props}]}),

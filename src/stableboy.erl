@@ -28,23 +28,10 @@ main(Args) ->
         {ok, {Opts, CmdArgs}} ->
             maybe_set_debug(Opts),
             lager:debug("Parsed CLI:~n  options: ~p~n  args: ~p~n", [Opts, CmdArgs]),
-            case process_cli(Opts, CmdArgs) of
-                help ->
-                    help();
-                list ->
-                    list_vms();
-                {get, GetArgs} ->
-                    get_vms(GetArgs);
-                {brand, BrandArgs} ->
-                    brand_vm(BrandArgs);
-                undefined ->
-                    io:format("ERROR: No command given!~n~n"),
-                    help(),
-                    halt(1)
-            end;
+            do_command(process_cli(Opts, CmdArgs));
         {error, Error} ->
             io:format("Invalid option sequence given: ~p~n~n", [Error]),
-            help(),
+            do_command(help),
             halt(1)
     end.
 
@@ -56,8 +43,15 @@ cli_options() ->
      {debug,       $d, "debug",  undefined, "Print extra debug output"},
      {config,      $f, "config", {string, filename:join([os:getenv("HOME"), ".stableboy"])},
       "Config file to use (defaults to .stableboy then ~/.stableboy)"},
-     {count,       $n, "count", {integer, 1}, "The number of harnesses to return (used for 'get' command)"}
+     {count,       $n, "count", {integer, 1}, "The number of harnesses to return (used for 'list' command)"}
     ].
+
+cli_args(Configs) ->
+    cli_args() ++
+        [{" "," "},
+         {"Given configuration:", " "},
+         {" "," "}] ++
+        [ {atom_to_list(K), io_lib:format("~p", [V])} || {K,V} <- Configs ].
 
 cli_args() ->
     [{" "," "},
@@ -70,12 +64,12 @@ cli_args() ->
      {" ", "  <file> for VMs matching the Erlang terms in the named file."},
      {"brand <name> <platform:version:arch[:user:password]>",
       "Set metadata for named VM (supported by non-sb_file backends)"},
-     {" ", " <name> of the named VM."},
-     {" ", " <platform> of VM, e.g. ubuntu, centos, fedora, osx."},
-     {" ", " <version> of VM, e.g. 12.04"},
-     {" ", " <arch> of VM, (32|64)."},
-     {" ", " <user> username for ssh login of VM."},
-     {" ", " <password> password for ssh login of VM."}
+     {" ", "  <name> of the named VM."},
+     {" ", "  <platform> of VM, e.g. ubuntu, centos, fedora, osx."},
+     {" ", "  <version> of VM, e.g. 12.04"},
+     {" ", "  <arch> of VM, (32|64)."},
+     {" ", "  <user> username for ssh login of VM."},
+     {" ", "  <password> password for ssh login of VM."}
     ].
 
 %%------------------
@@ -83,28 +77,39 @@ cli_args() ->
 %%------------------
 
 %% The 'help' command/switch
-help() ->
-    getopt:usage(cli_options(), escript:script_name(), "help | list | get (<name>|<file>)", cli_args()),
-    io:format("~nGiven configuration:~n~n~p~n", [application:get_all_env(stableboy)]).
+do_command(help) ->
+    getopt:usage(cli_options(), escript:script_name(), "help | list | get (<name>|<file>)",
+                 cli_args(application:get_all_env(stableboy)));
 
 %% The 'list' command
-list_vms() ->
+do_command({list, Args}) ->
     Backend = get_backend(),
-
     lager:debug("Running command 'list'"),
-    Backend:list().
+    Backend:list(Args);
 
 %% The 'get' command
-get_vms(Args) ->
+do_command({get, Names}) ->
     Backend = get_backend(),
-    lager:debug("Running command 'get' with args: ~p", [Args]),
-    Backend:get(Args).
+    lager:debug("Running command 'get'"),
+    Backend:get(Names);
 
 %% The 'brand' command
-brand_vm(Args) ->
+do_command({brand, Name, Meta}) ->
     Backend = get_backend(),
-    lager:debug("Running command 'brand' with args: ~p", [Args]),
-    Backend:brand(Args).
+    lager:debug("Running command 'brand'"),
+    Backend:brand(Name, Meta);
+
+%% User didn't pass a command, print an error and the help.
+do_command(undefined) ->
+    io:format("ERROR: No command given!~n~n"),
+    do_command(help),
+    halt(1);
+
+%% When user gives unknown command, print an error and the help
+do_command(Bad) ->
+    io:format("ERROR: Bad command given ~s!~n~n", [Bad]),
+    do_command(help),
+    halt(1).
 
 %%-----------------------------
 %% Internal functions
@@ -175,41 +180,46 @@ process_option(Option, _Args, Result) ->
 process_args([], Result) ->
     [ sb:set_config(Key,Value) || {Key, Value} <- Result ],
     proplists:get_value(command, Result);
-process_args(["help"|_], Result) ->
-    NewResult = proplists:delete(command, Result),
-    process_args([], [{command,help}|NewResult]);
-process_args(["get"|Extra], Result) ->
-    %% Don't override the 'help' flag
-    case proplists:is_defined(command, Result) of
-        true ->
-            process_args([], Result);
+process_args([Command0|Args], Result) ->
+    Command = try
+                  list_to_existing_atom(Command0)
+              catch
+                  _:badarg -> do_command(Command0) %% This is an unknown command, bail
+              end,
+    case (not proplists:is_defined(command, Result)
+          orelse overrides_command(Command)) of
         false ->
-            case Extra of
-                [] ->
-                    lager:error("The get command requires environment file or harness name to be specified"),
-                    halt(1);
-                _ ->
-                    process_args([], [{command, {get, Extra}}|Result])
-            end
-    end;
-process_args(["brand"|Extra], Result) ->
-    %% Don't override the 'help' flag
-    case proplists:is_defined(command, Result) of
-        true ->
             process_args([], Result);
-        false ->
-            case Extra of
-                [_Vm,_Meta] ->
-                    process_args([], [{command, {brand, Extra}}|Result]);
-                _ ->
-                    lager:error("The brand command requires a VM-name and metadata parameters."),
+        true ->
+            NewResult = proplists:delete(command, Result),
+            case validate_command(Command, Args) of
+                ok ->
+                    process_args([], [{command, construct_command(Command, Args)}|NewResult]);
+                {error, Reason} ->
+                    lager:error(Reason),
                     halt(1)
             end
-    end;
-process_args(["list"|_], Result) ->
-    case proplists:is_defined(command, Result) of
-        true ->
-            process_args([], Result);
-        false ->
-            process_args([], [{command, list}|Result])
     end.
+
+%% Help always wins!
+overrides_command(help) -> true;
+overrides_command(_) -> false.
+
+%% Validate number of arguments to commands
+validate_command(rollback, [_Name]) -> ok;
+validate_command(rollback, _) -> {error, "The rollback command requires a single VM name"};
+validate_command(snapshot, [_Name]) -> ok;
+validate_command(snapshot, _) -> {error, "The snapshot command requires a single VM name"};
+validate_command(get, []) -> {error, "The get command requires a list of harness names."};
+validate_command(get, _) -> ok;
+validate_command(brand,[_VM,_Meta]) -> ok;
+validate_command(brand,_) -> {error, "The brand command requires a VM-name and metadata parameters."};
+validate_command(_,_) -> ok.
+
+%% Turns command and CLI args into symbolic command
+construct_command(rollback, [Name]) -> {rollback, Name};
+construct_command(snapshot, [Name]) -> {snapshot, Name};
+construct_command(get, Names) -> {get, Names};
+construct_command(help, _) -> help;
+construct_command(list, Args) -> {list, Args};
+construct_command(brand, [VM,Meta]) -> {brand, VM, Meta}.
