@@ -187,7 +187,9 @@ ensure_vm_started(_Alias, 0, _Started) -> error;
 ensure_vm_started(Alias, NTries, Started) ->
     case Started of
         false ->
-            command(?START_CMD(Alias), fun started_vm/1)
+            command(?START_CMD(Alias), fun started_vm/1);
+        true ->
+            ok
     end,
     case get_conn_data(Alias) of
         {undefined,_Port} ->
