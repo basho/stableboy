@@ -57,7 +57,6 @@ get_by_file(Args) ->
     case file:consult(Args) of
         {ok, Properties} ->
             VMList = command(?LIST_CMD, fun format_list/1),
-            VMInfo = command(?LIST_CMD, fun format_get/1),
             Count = sb:get_config(count),
 
             %% attempt to match the properties in the file with available VM's
@@ -68,8 +67,8 @@ get_by_file(Args) ->
                                                 % so translate each using match_by_name
                     lager:debug("get_by_file: SearchResult: ~p", [SearchResult]),
 
-                    %% Start the VMs if they aren't already.
-                    [ command(?START_CMD(VM), fun started_vm/1) || {VM,_,_,_} <- SearchResult ],
+                    %% Get VM info and Start the VMs if they aren't already.
+                    VMInfo = [ get_vm(VM) || {VM,_,_,_} <- SearchResult ],
 
                     PrintResult = fun(SearchRes) ->
                                                 % Get the name out
@@ -92,13 +91,8 @@ get_by_file(Args) ->
 
 %% @doc Get a VM by name (alias).
 get_by_name([Alias|_Args]) ->
-    VM = get_vm(Alias),
-    case VM of
-        {error, _Reason} -> ok;
-        _VM ->
-            command(?START_CMD(Alias), fun started_vm/1)
-    end,
-    sb_vm_common:print_result([VM]),
+    VMInfo = get_vm(Alias),
+    sb_vm_common:print_result([VMInfo]),
     ok.
 
 %% TODO: Do this
@@ -150,7 +144,7 @@ format_extra(Alias,Output) ->
                     {Alias,list_to_atom(OS),Vints,list_to_integer(Arch),User,Pass};
                 _ ->
                     %% error msg?
-                    io:format("sb_info failed: Xtra = ~p~n", [Xtra]),
+                    lager:error("sb_info failed: Xtra = ~p~n", [Xtra]),
                     Unknown
             end;
         _ -> Unknown
@@ -187,14 +181,29 @@ format_list(Output) ->
     Xtras = [command(?GET_XDATA_CMD(Name), Name, fun format_extra/2) || Name <- Names],
     lists:map(fun({VM,OS,Ver,Arch,_User,_Pass}) -> {VM,OS,Ver,Arch} end, Xtras).
 
-%% @doc Format output for the 'get' command into Erlang terms.
-%% {Alias,IP,Port,User,Password}
-format_get(Output) ->
-    %% TODO: take the config file and user default user/password if both here are empty
-    Names = format_names(Output),
-    [ get_vm(VM) || VM <- Names].
+%% Try to make sure the VM is running before returning.
+%% Sleeps 1 second between trys to start the VM
+ensure_vm_started(_Alias, 0, _Started) -> error;
+ensure_vm_started(Alias, NTries, Started) ->
+    case Started of
+        false ->
+            command(?START_CMD(Alias), fun started_vm/1);
+        true ->
+            ok
+    end,
+    case get_conn_data(Alias) of
+        {undefined,_Port} ->
+            timer:sleep(1000),
+            ensure_vm_started(Alias, NTries-1,true);
+        _ ->
+            ok
+    end.
+ensure_vm_started(Alias) ->
+    ensure_vm_started(Alias,3,false).
 
 %% @doc Get a VM by it's name
+%% The VM has to be started in order to return it's IP address,
+%% so it's always started by calling this function.
 get_vm(VM) ->
     case command(?GET_XDATA_CMD(VM), VM, fun format_extra/2) of
         {_Alias, undefined, _, _, _, _} ->
@@ -205,8 +214,14 @@ get_vm(VM) ->
                      end,
             {error, "sb_vbox:get VM '" ++ VM ++ "' failed because " ++ Reason};
         {_Alias,_OS,_Ver,_Arch,User,Pass} ->
-            {IP,Port} = get_conn_data(VM),
-            {VM,IP,Port,User,Pass}
+            case ensure_vm_started(VM) of
+                error ->
+                    Reason = " it either failed to start or return an IP address.",
+                    {error, "sb_vbox:get VM '" ++ VM ++ "' failed because " ++ Reason};
+                ok ->
+                    {IP,Port} = get_conn_data(VM),
+                    {VM,IP,Port,User,Pass}
+            end
     end.
 
 %% @doc Get IP and Port address information for a named VM.
