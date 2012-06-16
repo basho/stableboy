@@ -24,11 +24,16 @@
 -export([list/1, get/1, snapshot/1, rollback/1, brand/2]).
 
 -define(LIST_CMD, "vboxmanage list vms").
+-define(LISTRUNNING_CMD, "vboxmanage list runningvms").
 -define(GET_XDATA_CMD(VM), "vboxmanage getextradata " ++ VM ++ " sb_info").
 -define(SET_XDATA_CMD(VM,META), "vboxmanage setextradata " ++ VM ++ " sb_info " ++ META).
 -define(GET_IPDATA_CMD(VM), "vboxmanage guestproperty get " ++ VM ++ " /VirtualBox/GuestInfo/Net/0/V4/IP").
 -define(GET_PORTDATA_CMD(VM), "vboxmanage showvminfo " ++ VM ++ " | egrep \"name = .*ssh,.*host port = \"").
 -define(START_CMD(VM), "vboxmanage startvm " ++ VM ++ " --type headless").
+-define(LISTSNAPSHOTS_CMD(VM), "vboxmanage snapshot " ++ VM ++ " list").
+-define(VMSTATE_CMD(VM), "vboxmanage showvminfo --machinereadable " ++ VM ++ " | egrep VMState=").
+-define(SNAPSHOT_CMD(VM), "vboxmanage snapshot " ++ VM ++ " take " ++ VM ++ "_stableboy").
+-define(RESTORE_CMD(VM), "vboxmanage snapshot " ++ VM ++ " restore " ++ VM ++ "_stableboy").
 
 %% List the available VM's
 list(_) ->
@@ -95,14 +100,35 @@ get_by_name([Alias|_Args]) ->
     sb_vm_common:print_result([VMInfo]),
     ok.
 
-%% TODO: Do this
-snapshot (Args) ->
-    lager:debug("In sb_vbox:snapshot with args: ~p and ~p", [Args]),
-    ok.
+%% @doc Take a snapshot of the named VM. --safe will never delete an existing snapshot
+%% There is only ever a single snapshot saved, known as the "current" snapshot. Taking
+%% a new one will write over the old one.
+%% cmd: vboxmanage take
+snapshot (Alias) ->
+    lager:debug("In sb_vbox:snapshot with args: ~p", [Alias]),
+    Force = sb:get_config(force),
+    case {snap_shot_exists(Alias),Force} of
+        {true,false} ->
+            %% don't stomp existing snapshot in "safe" mode
+            ok;
+        {_,true} ->
+            command(?VMSTATE_CMD(Alias), Alias, fun format_snapshot/2),
+            ok
+    end.
 
-%% TODO: Do this
-rollback (Args) ->
-    lager:debug("In sb_vbox:rollback with args: ~p and ~p", [Args]),
+%% @doc Restore the named VM to a previous snapshot. Fails with
+%% error message and exit(1) if no snapshot is available.
+rollback (Alias) ->
+    lager:debug("In sb_vbox:rollback with args: ~p", [Alias]),
+    case snap_shot_exists(Alias) of
+        true ->
+            command(?RESTORE_CMD(Alias), Alias, fun format_restore/2);
+        false ->
+            Reason = "sb_vbox: rollback for " ++ Alias ++ " failed because no snapshot was found.",
+            lager:error(Reason, []),
+            io:format(Reason, []),
+            halt(1)
+    end,
     ok.
 
 %% @doc Brands a VM with given metadata.
@@ -181,25 +207,65 @@ format_list(Output) ->
     Xtras = [command(?GET_XDATA_CMD(Name), Name, fun format_extra/2) || Name <- Names],
     lists:map(fun({VM,OS,Ver,Arch,_User,_Pass}) -> {VM,OS,Ver,Arch} end, Xtras).
 
+%% Standard output is empty when there is no snapshot
+format_list_snapshot([]) -> false;
+format_list_snapshot(_) -> true.
+
+%% Take a snapshot iff the VM is in the poweroff state, otherwise error halt(1)
+%% Output is like: VMState="poweroff" if all is good for snapshotting.
+format_snapshot(Output, Alias) ->
+    case re:run(Output, "poweroff") of
+        {match, _} ->
+            command(?SNAPSHOT_CMD(Alias), fun took_snapshot/1);
+        nomatch ->
+            Reason = "sb_vbox: failed to take snapshot. VM not powered off. " ++ Output,
+            io:format(Reason, []),
+            lager:error(Reason, []),
+            halt(1)
+    end,
+    ok.
+
+%% Restore a VM snapshot, halt on failure.
+format_restore(Output, Alias) ->
+    case re:run(Output, "[f|F]ailure") of
+        nomatch ->
+            ok;
+        {match,_} ->
+            Reason = "sb_vbox: failed to restore snapshot for VM: " ++ Alias,
+            io:format("~s~n~p", [Reason, Output]),
+            lager:error("~s", [Reason]),
+            lager:error("~p", [Output]),
+            halt(1)
+    end.
+
+%% @doc return boolean status of VM's running status
+vm_is_running(Alias) ->
+    Names = command(?LISTRUNNING_CMD, fun format_names/1),
+    lists:member(Alias, Names).
+
+%% @doc return whether a snapshot exists for a named VM
+snap_shot_exists(Alias) ->
+    command(?LISTSNAPSHOTS_CMD(Alias), fun format_list_snapshot/1).
+
 %% Try to make sure the VM is running before returning.
 %% Sleeps 1 second between trys to start the VM
-ensure_vm_started(_Alias, 0, _Started) -> error;
-ensure_vm_started(Alias, NTries, Started) ->
-    case Started of
-        false ->
-            command(?START_CMD(Alias), fun started_vm/1);
+ensure_vm_started(_Alias, 0) -> error;
+ensure_vm_started(Alias, NTries) ->
+    case vm_is_running(Alias) of
         true ->
-            ok
-    end,
-    case get_conn_data(Alias) of
-        {undefined,_Port} ->
+            ok;
+        false ->
             timer:sleep(1000),
-            ensure_vm_started(Alias, NTries-1,true);
-        _ ->
-            ok
+            ensure_vm_started(Alias, NTries-1)
     end.
 ensure_vm_started(Alias) ->
-    ensure_vm_started(Alias,3,false).
+    case vm_is_running(Alias) of
+        true ->
+            ok;
+        false ->
+            command(?START_CMD(Alias), fun started_vm/1),
+            ensure_vm_started(Alias, 3)
+    end.
 
 %% @doc Get a VM by it's name
 %% The VM has to be started in order to return it's IP address,
@@ -237,6 +303,9 @@ get_conn_data(Name) ->
 %% @doc Callback for result of starting a VM
 started_vm(Output) ->
     lager:debug("Started VM! ~s", [Output]).
+
+took_snapshot(Output) ->
+    lager:debug("Took a snapshot! ~s", [Output]).
 
 %% @doc Converts a dot-delimited version string into a list of version integers.
 version_to_intlist(V) ->
