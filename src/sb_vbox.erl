@@ -124,9 +124,7 @@ rollback (Alias) ->
         true ->
             command(?RESTORE_CMD(Alias), Alias, fun format_restore/2);
         false ->
-            Reason = "sb_vbox: rollback for " ++ Alias ++ " failed because no snapshot was found.",
-            lager:error(Reason, []),
-            io:format(Reason, []),
+            lager:error("sb_vbox: rollback for ~s failed because no snapshot was found.", [Alias]),
             halt(1)
     end,
     ok.
