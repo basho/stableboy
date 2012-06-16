@@ -35,11 +35,22 @@
 -behaviour(stableboy_vm_backend).
 
 -export([list/1, get/1, snapshot/1, rollback/1, brand/2]).
--define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias nics tags; done").
--define(STARTCMD(Alias), "vmadm lookup state=stopped alias=\"" ++ Alias ++ "\" | xargs -n1 vmadm start").
--define(BRANDCMD, "vmadm update `vmadm lookup alias=~s` -f ~s").
 
-%% @doc Lists all available VMs with platform/version/architecture information.
+%% Command macros for global zone
+-define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias nics tags; done").
+-define(STARTCMD(Alias), io_lib:format("vmadm lookup state=stopped alias=\"~s\"| xargs -n1 vmadm start",[Alias])).
+-define(BRANDCMD, "vmadm update `vmadm lookup alias=~s` -f ~s").
+-define(LOOKUPCMD(N), io_lib:format("vmadm lookup alias=~s",[N])).
+-define(STOPCMD(U), io_lib:format("vmadm stop ~s",[U])).
+-define(FORCESTOPCMD(U), io_lib:format("~s -f", [?STOPCMD(U)])).
+-define(ROLLBACKCMD(U), io_lib:format("zfs rollback ~s", [snapshot_name(U)])).
+-define(DETECTDISKCMD(U), io_lib:format("vmadm get ~s | json disks.0.zfs_filesystem", [U])).
+-define(DETECTSNAPCMD(U), io_lib:format("zfs list -t snapshot ~s", [snapshot_name(U)])).
+-define(DETECTSTOPCMD(U), io_lib:format("vmadm list state=stopped | grep ~s", [U])).
+-define(DESTROYSNAPCMD(U), io_lib:format("zfs destroy ~s",[snapshot_name(U)])).
+-define(CREATESNAPCMD(U), io_lib:format("zfs snapshot ~s",[snapshot_name(U)])).
+
+%% @doc Lists available VMs with platform/version/architecture information.
 list(_) ->
     lager:debug("In sb_smartos:list/0"),
     case gzcommand(?LISTCMD, fun format_list/1) of
@@ -50,25 +61,57 @@ list(_) ->
     end,
     ok.
 
-%% @doc Gets login information about VMs by name or by file.
-get(Args) ->
-    lager:debug("In sb_smartos:get/1"),
-    case filelib:is_file(hd(Args)) of
-        true ->
-            ok = get_by_file(Args);
+%% @doc Gets login information about VMs by name
+get([]) ->
+    ok;
+get([Name|Rest]) ->
+    ok = get_by_name(Name),
+    ?MODULE:get(Rest).
+
+%% @doc Snapshot a VM(s)
+snapshot(Alias) ->
+    lager:debug("In sb_smartos:snapshot/1"),
+    Force = sb:get_config(force, false),
+    UUID = uuid(Alias),
+    Exists = snapshot_exists(UUID),
+    case Force orelse not Exists of
         false ->
-            ok = get_by_name(Args)
+            %% Don't create a new one if it exists
+            io:format("Snapshot for ~s already exists.~n", [Alias]),
+            ok;
+        true ->
+            gzcommand(?STOPCMD(UUID)),
+            wait_for_stop(UUID),
+            case create_snapshot(UUID, Exists) of
+                {error, Reason} ->
+                    lager:error("sb_smartos: snapshot creation failed with ~p", [Reason]),
+                    halt(1);
+                _ ->
+                    io:format("Successfully created snapshot for ~s.~n", [Alias]),
+                    ok
+            end
     end.
 
-%% @doc Snapshot a VM(s), not yet implemented.
-snapshot(_Args) ->
-    lager:debug("In sb_smartos:snapshot/1"),
-    ok.
-
 %% @doc Rollback a VM(s), not yet implemented.
-rollback(_Args) ->
+rollback(Alias) ->
     lager:debug("In sb_smartos:rollback/1"),
-    ok.
+    UUID = uuid(Alias),
+    case snapshot_exists(UUID) of
+        false ->
+            lager:error("sb_smartos: No snapshot exists for ~s, cannot rollback!", [Alias]),
+            halt(1);
+        true ->
+            gzcommand(?FORCESTOPCMD(UUID)),
+            wait_for_stop(UUID),
+            case gzcommand(?ROLLBACKCMD(UUID)) of
+                {error, Reason} ->
+                    lager:error("sb_smartos: Rollback failed for ~s with ~p", [Alias, Reason]),
+                    halt(1);
+                _ ->
+                    io:format("Successfully rolled back VM ~s.", [Alias]),
+                    ok
+            end
+    end.
 
 %% @doc Brands a VM with given metadata.
 brand(Alias, Meta) ->
@@ -86,6 +129,71 @@ brand(Alias, Meta) ->
 %%-------------------
 %% Internal functions
 %%-------------------
+
+%% @doc Map alias->UUID and memoize result in pdict.
+uuid(Alias) ->
+    case erlang:get({uuid, Alias}) of
+        undefined ->
+            case gzcommand(?LOOKUPCMD(Alias)) of
+                {error, Reason} ->
+                    lager:error("sb_smartos: VM lookup of ~s failed with ~p:", [Alias, Reason]),
+                    halt(1);
+                <<>> ->
+                    lager:error("sb_smartos: no VM named ~s", [Alias]),
+                    halt(1);
+                UUID0 ->
+                    {match, [UUID]} = re:run(UUID0, "[-/\\w]+", [{capture, first, binary}]),
+                    erlang:put({uuid, Alias}, UUID),
+                    UUID
+            end;
+        U -> U
+    end.
+
+%% @doc Detect whether a snapshot exists for a given VM UUID
+snapshot_exists(UUID) ->
+    case gzcommand(?DETECTSNAPCMD(UUID)) of
+        {error, _} -> false;
+        _ -> true
+    end.
+
+%% @doc Waits for a VM to get to the stopped state.
+wait_for_stop(UUID) ->
+    case gzcommand(?DETECTSTOPCMD(UUID)) of
+        {error, _} ->
+            timer:sleep(5000),
+            wait_for_stop(UUID);
+        _ ->
+            ok
+    end.
+
+%% @doc Creates a snapshot, deleting one if it already exists.
+create_snapshot(UUID, true) ->
+    lager:debug("sb_smartos: destroying existing ZFS snapshot for ~s", [UUID]),
+    gzcommand(?DESTROYSNAPCMD(UUID)),
+    create_snapshot(UUID, false);
+create_snapshot(UUID, false) ->
+    lager:debug("sb_smartos: creating ZFS snapshot for ~s", [UUID]),
+    gzcommand(?CREATESNAPCMD(UUID)).
+
+
+snapshot_name(UUID) ->
+    io_lib:format("~s@stableboy", [disk(UUID)]).
+
+%% @doc Get the disk name for a VM UUID and memoize it in the pdict.
+disk(UUID) ->
+    case erlang:get({disk, UUID}) of
+        undefined ->
+            case gzcommand(?DETECTDISKCMD(UUID)) of
+                {error, _} ->
+                    lager:error("sb_smartos: Could not detect filesystem of VM ~s", [UUID]),
+                    halt(1);
+                Name0 ->
+                    {match, [Name]} = re:run(Name0, "[-/\\w]+", [{capture, first, binary}]),
+                    erlang:put({disk, UUID}, Name),
+                    Name
+            end;
+        D -> D
+    end.
 
 %% @doc Given a base name, generates a file that can be uploaded to in
 %% a temporary place.
@@ -128,26 +236,29 @@ gzupload(Filename, Data) ->
 
 %% @doc Passes an SSH connection to the global zone to the Function.
 with_connection(Function) ->
-    Host = sb:get_config(vm_host),
-    Port = sb:get_config(vm_port, 22),
-    User = sb:get_config(vm_user, "root"),
-    Pass = sb:get_config(vm_pass),
-    start_ssh(),
-    lager:debug("Connecting to SmartOS GZ: ~s:~p ~s:~s", [Host, Port, User, Pass]),
-    case ssh:connect(Host, Port,[{user,User},{password,Pass},{silently_accept_hosts,true}]) of
-        {ok, Connection} ->
-            Result = Function(Connection),
-            ssh:close(Connection),
-            Result;
-        {error, Reason} ->
-            lager:error("SSH connection failed with reason: ~p~n", [Reason]),
-            {error, Reason}
-    end.
+    Function(gzconnection()).
 
-%% @doc Makes sure the SSH applicaiton is started.
-start_ssh() ->
-    application:start(crypto),
-    application:start(ssh).
+%% @doc Gets the existing SSH connection or opens a new one.
+gzconnection() ->
+    case erlang:get(gz_conn) of
+        undefined ->
+            Host = sb:get_config(vm_host),
+            Port = sb:get_config(vm_port, 22),
+            User = sb:get_config(vm_user, "root"),
+            Pass = sb:get_config(vm_pass),
+            application:start(crypto),
+            application:start(ssh),
+            lager:debug("Connecting to SmartOS GZ: ~s:~p ~s:~s", [Host, Port, User, Pass]),
+            case ssh:connect(Host, Port,[{user,User},{password,Pass},{silently_accept_hosts,true}]) of
+                {ok, Connection} ->
+                    erlang:put(gz_conn, Connection),
+                    Connection;
+                {error, Reason} ->
+                    lager:error("SSH connection failed with reason: ~p~n", [Reason]),
+                    halt(1)
+            end;
+        C -> C
+    end.
 
 %% @doc Gets a VM(s) by the constraints given in the file.
 get_by_file(Args) ->
@@ -190,7 +301,7 @@ get_by_file(Args) ->
     end.
 
 %% @doc Get a VM by name (alias).
-get_by_name([Alias|_Args]) ->
+get_by_name(Alias) ->
     Command = "vmadm get `vmadm lookup alias=" ++ Alias ++ "` | json -o json-0 alias nics tags",
     case gzcommand(Command, fun format_get/1) of
         {error, _Reason} -> %% TODO: print something?
