@@ -21,9 +21,51 @@
 -module(sb_vm_common).
 
 %% Public api
--export([match_by_name/2, match_by_props/2, match_by_props/3, print_result/1, extract_branding/1]).
+-export([match_by_name/2,
+         match_by_props/2,
+         match_by_props/3,
+         print_result/1,
+         extract_branding/1,
+         list_by_properties/2,
+         list_by_file/2]).
 
 %% Public API
+
+%% @doc Loads an environment file, then lists matching VMs
+list_by_file(EnvFile, VMList) ->
+    lager:debug("In sb_vm_common:list_by_file(~p,~p)", [EnvFile, VMList]),
+    case filelib:is_file(EnvFile) of
+        true ->
+            case file:consult(EnvFile) of
+                {ok, Properties} ->
+                    list_by_properties(Properties, VMList);
+                {error, Reason} ->
+                    lager:error("Failed to parse file: ~s with error: ~p", [EnvFile, Reason]),
+                    {error, Reason}
+            end;
+        false ->
+            lager:error("Invalid environment filename: ~s", [EnvFile]),
+            {error, enoent}
+    end.
+
+%% @doc Lists VMs that match the given properties
+list_by_properties(Props, VMList) ->
+    lager:debug("In sb_vm_common:list_by_properties(~p,~p)", [Props, VMList]),
+    Count = sb:get_config(count, undefined),
+    if
+        is_integer(Count) ->
+            lager:debug("Number of VMs requested: ~p", [Count]),
+            case match_by_props(VMList, Props, Count) of
+                {ok, SearchResult} ->
+                    print_result(SearchResult);
+                {error, Reason} ->
+                    lager:error("Unable to find VMs: ~p", [Reason]),
+                    {error, Reason}
+            end;
+        true -> %% If there's no count, print them all
+            lager:debug("GET ALL THE VMs!"),
+            print_result(VMList)
+    end.
 
 %% Match given a list of VM tuples and a VM name
 match_by_name(VMList, Name) ->
@@ -51,7 +93,7 @@ match_by_props(VMList, Props, Count) ->
     %% Make sure we have a platform
     PlatformProp = case proplists:lookup(platform, Props) of
                        none ->
-                           lager:error("Property {plaform, } must be defined in environment file"),
+                           lager:error("Property {platform, } must be defined"),
                            halt(1);
                        _P -> _P
                    end,
@@ -87,8 +129,8 @@ match_by_props(VMList, Props, Count) ->
 
 %% Common output function for all backends
 print_result(Results) ->
-    lists:foreach( fun(T) -> io:format("~p.~n", [T]) end,
-                   Results).
+    Format = lists:flatten([ "~p.~n" || _ <- Results]),
+    io:format(Format, Results).
 
 %% Extract branding information from the CLI input for use in the VM backend.
 extract_branding(Meta) ->
@@ -122,15 +164,16 @@ match_all (VMList, Env) ->
     end.
 
 
-match_one (VMList, Platform) ->
-    {ok, [FirstMatch|_]} = match_all(VMList, Platform),
-    FirstMatch.
+%% match_one (VMList, Platform) ->
+%%     {ok, [FirstMatch|_]} = match_all(VMList, Platform),
+%%     FirstMatch.
 
-%% check to see if the platform matches any of the valid ones
-match_any ({_,_,_}=Platform,ValidPlatforms) ->
-    lists:any(fun (P) -> match(Platform,P) end,ValidPlatforms).
+%% %% check to see if the platform matches any of the valid ones
+%% match_any ({_,_,_}=Platform,ValidPlatforms) ->
+%%     lists:any(fun (P) -> match(Platform,P) end,ValidPlatforms).
 
 %% match (A,B) ensures that platform A >= B
+match (_, {'*', '*', '*'}) -> true;
 match ({F,Va,A},{F,Vb,A}) -> cmp_version(Va,Vb) =/= lt;
 match ({F,Va,_},{F,Vb,'*'}) -> cmp_version(Va,Vb) =/= lt;
 match ({F,_,_},{F,'*','*'}) -> true;

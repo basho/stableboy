@@ -43,7 +43,7 @@ cli_options() ->
      {debug,       $d, "debug",  undefined, "Print extra debug output"},
      {config,      $f, "config", {string, filename:join([os:getenv("HOME"), ".stableboy"])},
       "Config file to use (defaults to .stableboy then ~/.stableboy)"},
-     {count,       $n, "count", {integer, 1}, "The number of harnesses to return (used for 'list' command)"},
+     {count,       $n, "count", {integer, undefined}, "The number of harnesses to return (used for 'list' command)"},
      {force,       $F, "force", undefined, "When creating a snapshot, overwrite any existing snapshot"}
     ].
 
@@ -181,8 +181,8 @@ process_option({config, Filename}, _Args, Result) ->
         {error, _Reason} ->
             halt(1)
     end;
-process_option({count, N},["get"|_], Result) ->
-    %% If the command is not 'get', we don't care about --count option
+process_option({count, N},["list"|_], Result) ->
+    %% If the command is not 'list', we don't care about --count option
     NewResult = proplists:delete(count, Result),
     [{count, N}|NewResult];
 process_option(force, ["snapshot"|_], Result) ->
@@ -223,6 +223,9 @@ overrides_command(help) -> true;
 overrides_command(_) -> false.
 
 %% Validate number of arguments to commands
+validate_command(list, []) -> ok;
+validate_command(list, [_Filename]) -> ok;
+validate_command(list, _) -> {error, "Too many arguments for the list command, which requires nothing or an environment file."};
 validate_command(rollback, [_Name]) -> ok;
 validate_command(rollback, _) -> {error, "The rollback command requires a single VM name"};
 validate_command(snapshot, [_Name]) -> ok;

@@ -34,7 +34,11 @@
 -module(sb_smartos).
 -behaviour(stableboy_vm_backend).
 
--export([list/1, get/1, snapshot/1, rollback/1, brand/2]).
+-export([list/1,
+         get/1,
+         snapshot/1,
+         rollback/1,
+         brand/2]).
 
 %% Command macros for global zone
 -define(LISTCMD, "for vm in `vmadm lookup`; do vmadm get $vm | json -o json-0 alias nics tags; done").
@@ -51,15 +55,12 @@
 -define(CREATESNAPCMD(U), io_lib:format("zfs snapshot ~s",[snapshot_name(U)])).
 
 %% @doc Lists available VMs with platform/version/architecture information.
-list(_) ->
-    lager:debug("In sb_smartos:list/0"),
-    case gzcommand(?LISTCMD, fun format_list/1) of
-        {error, _Reason} -> %% TODO: print something?
-            ok;
-        VMs ->
-            sb_vm_common:print_result(VMs)
-    end,
-    ok.
+list([]) ->
+    lager:debug("In sb_smartos:list (unfiltered)"),
+    sb_vm_common:list_by_properties([{platform, '*'}], gzcommand(?LISTCMD, fun format_list/1));
+list([Filename]) ->
+    lager:debug("In sb_smartos:list (filename)"),
+    sb_vm_common:list_by_file(Filename, gzcommand(?LISTCMD, fun format_list/1)).
 
 %% @doc Gets login information about VMs by name
 get([]) ->
@@ -258,46 +259,6 @@ gzconnection() ->
                     halt(1)
             end;
         C -> C
-    end.
-
-%% @doc Gets a VM(s) by the constraints given in the file.
-get_by_file(Args) ->
-    lager:debug("In sb_smartos:get_by_file with args: ~p", Args),
-                                                % Read in environment config file
-    case file:consult(Args) of
-        {ok, Properties} ->
-            RawVMList = gzcommand(?LISTCMD),
-            VMList = format_list(RawVMList),
-            VMInfo = format_get(RawVMList),
-            Count = sb:get_config(count),
-
-            %% attempt to match the properties in the file with available VM's
-            case sb_vm_common:match_by_props(VMList, Properties, Count) of
-                {ok, SearchResult} ->
-                                                % The search results come back as the <vms> structure and
-                                                % and needs to be of the form of vm_info
-                                                % so translate each using match_by_name
-                    lager:debug("get_by_file: SearchResult: ~p", [SearchResult]),
-
-                    %% Start the VMs if they aren't already.
-                    [ gzcommand(?STARTCMD(VM), fun started_vm/1) || {VM,_,_,_} <- SearchResult ],
-
-                    PrintResult = fun(SearchRes) ->
-                                                % Get the name out
-                                          {ok, MBNRes} = sb_vm_common:match_by_name(VMInfo, element(1, SearchRes)),
-                                          sb_vm_common:print_result(MBNRes)
-                                  end,
-
-                                                % Print each result we got back
-                    lists:foreach(PrintResult, SearchResult),
-                    ok;
-                {error, Reason} ->
-                    lager:error("Unable to get VM: ~p", [Reason])
-            end;
-
-        {error, Reason} ->
-            lager:error("Failed to parse file: ~p with error: ~p", [Args, Reason]),
-            {error, Reason}
     end.
 
 %% @doc Get a VM by name (alias).
