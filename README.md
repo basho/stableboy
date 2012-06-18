@@ -42,7 +42,7 @@ can be
 
 ```text
 $ ./stableboy list ubuntu-vm.config
-{ok,"192.168.1.118",22,"root","root"}
+{"ubuntu-1104-64",ubuntu,[11,0,4],64}
 ```
 
 #### List multiple (by count)
@@ -52,12 +52,9 @@ request a number of the same VM's.  So for example, if you need four
 Ubuntu 11.04 VM's, you can:
 
 ```text
-$ ./stableboy --count 4 list ubuntu-vm.config
-{ok,"192.168.1.118",22,"root","root"}
-{ok,"192.168.1.119",22,"root","root"}
-{ok,"192.168.1.120",22,"root","root"}
-
-{ok,"192.168.1.121",22,"root","root"}
+$ ./stableboy --count 2 list ubuntu-vm.config
+{"ubuntu-1104-64",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-2",ubuntu,[11,0,4],64}
 ```
 
 If the number of VM's requested isn't available, an `{error, Reason}`
@@ -79,6 +76,7 @@ command.
 $ ./stableboy list
 {"ubuntu-1104-64",ubuntu,[11,0,4],64}
 {"centos-57-64"},rhel,[5,7,0],64}
+
 $ ./stableboy get "ubuntu-1104-64"
 {ok,"192.168.1.118",22,"root","root"}
 ```
