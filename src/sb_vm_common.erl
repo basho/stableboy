@@ -27,7 +27,9 @@
          print_result/1,
          extract_branding/1,
          list_by_properties/2,
-         list_by_file/2]).
+         list_by_file/2,
+         wait_for_ssh_port/1,
+         wait_for_ssh_port/2]).
 
 %% Public API
 
@@ -127,17 +129,59 @@ match_by_props(VMList, Props, Count) ->
 
 
 
-%% Common output function for all backends
+%% @doc Common output function for all backends
 print_result(Results) ->
     Format = lists:flatten([ "~p.~n" || _ <- Results]),
     io:format(Format, Results).
 
-%% Extract branding information from the CLI input for use in the VM backend.
+%% @doc Extract branding information from the CLI input for use in the VM backend.
 extract_branding(Meta) ->
     extract_branding(re:split(Meta, ":", [{return, binary}]),
                      [platform,version,architecture,user,password], []).
 
+
+%% @doc Waits for the SSH port of the VM to become available, perhaps
+%% after starting. This ensures that the client program
+%% (basho_harness) can actually connect to the port.
+%% @end
+%% Based on the trick in riak-ruby-client's TCPSocket.wait_for_service_with_timeout
+wait_for_ssh_port({_Name,_IP,_Port,_User,_Pass}=VM) ->
+    wait_for_ssh_port(VM, 60000).
+
+wait_for_ssh_port({_Name,IP,Port,_User,_Pass}, Timeout) ->
+    wait_for_ssh_port(IP,Port,Timeout).
+
+wait_for_ssh_port(IP, Port, Timeout) when is_integer(Timeout) ->
+    lager:debug("Waiting for SSH Port ~p:~p within timeout ~p", [IP, Port, Timeout]),
+    TRef = erlang:send_after(Timeout, self(), timeout),
+    wait_for_ssh_port(IP, Port, TRef);
+wait_for_ssh_port(IP, Port, Timeout) ->
+    Me = self(),
+    erlang:spawn(fun() ->
+                         case gen_tcp:connect(IP, Port, [], 1000) of
+                             {ok, Socket} ->
+                                 gen_tcp:close(Socket),
+                                 Me ! connected;
+                             {error, Reason} ->
+                                 Me ! {error, Reason}
+                         end
+                 end),
+    receive
+        timeout ->
+            lager:error("SSH port ~p:~p did not come up within timeout: ", [IP, Port]),
+            {error, timeout};
+        {error, Reason} ->
+            lager:debug("Waiting for SSH port ~p:~p failed: ~p", [IP, Port, Reason]),
+            wait_for_ssh_port(IP, Port, Timeout);
+        connected ->
+            lager:debug("SSH port is up ~p:~p", [IP, Port]),
+            ok
+    end.
+
+
+%%
 %% Private functions
+%%
 
 %% given a list of environment properties in tuple form, find the first match
 match_all (VMList, Env) ->
