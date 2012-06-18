@@ -45,14 +45,14 @@ $ ./stableboy list ubuntu-vm.config
 {ok,"192.168.1.118",22,"root","root"}
 ```
 
-#### Multi-Get (count)
+#### List multiple (by count)
 
 You can specify a `--count` or `-n` on the command line to
 request a number of the same VM's.  So for example, if you need four
 Ubuntu 11.04 VM's, you can:
 
 ```text
-$ ./stableboy --count 4 get ubuntu-vm.config
+$ ./stableboy --count 4 list ubuntu-vm.config
 {ok,"192.168.1.118",22,"root","root"}
 {ok,"192.168.1.119",22,"root","root"}
 {ok,"192.168.1.120",22,"root","root"}
@@ -63,7 +63,7 @@ $ ./stableboy --count 4 get ubuntu-vm.config
 If the number of VM's requested isn't available, an `{error, Reason}`
 tuple will be returned. You will not get a partial list of Vm's.
 
-Multi-get is only supported by the `sb_vbox` backend currently.
+The count argument is only supported by the `sb_vbox` and `sb_smartos` backends.
 
 ### Get
 
@@ -71,10 +71,6 @@ To get access to one of these VM's, you can issue a `get` command.
 
 The return value of `get` is the following format `{ok,
 "<ip_address>", port, "user", "password"}` or `{error, "Reason"}`
-
-The `get` command has a few options in its use.
-
-#### Get by Name
 
 Specify one or more (space separated) VMs by name as given by the `list`
 command.
