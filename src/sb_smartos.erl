@@ -160,7 +160,7 @@ snapshot_exists(UUID) ->
 wait_for_stop(UUID) ->
     case gzcommand(?DETECTSTOPCMD(UUID)) of
         {error, _} ->
-            timer:sleep(5000),
+            timer:sleep(10000),
             wait_for_stop(UUID);
         _ ->
             ok
@@ -302,7 +302,8 @@ get_by_file(Args) ->
 
 %% @doc Get a VM by name (alias).
 get_by_name(Alias) ->
-    Command = "vmadm get `vmadm lookup alias=" ++ Alias ++ "` | json -o json-0 alias nics tags",
+    UUID = uuid(Alias),
+    Command = io_lib:format("vmadm get ~s | json -o json-0 alias nics tags", [UUID]),
     case gzcommand(Command, fun format_get/1) of
         {error, _Reason} -> %% TODO: print something?
             ok;
