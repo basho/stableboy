@@ -36,66 +36,22 @@
 -define(RESTORE_CMD(VM), "vboxmanage snapshot " ++ VM ++ " restore " ++ VM ++ "_stableboy").
 
 %% List the available VM's
-list(_) ->
-    lager:debug("In sb_vbox:list"),
-    case command(?LIST_CMD, fun format_list/1) of
-        VMs ->
-            sb_vm_common:print_result(VMs)
-    end,
-    ok.
+list([]) ->
+    lager:debug("In sb_vbox:list (unfiltered)"),
+    sb_vm_common:list_by_properties([{platform, '*'}], command(?LIST_CMD, fun format_list/1));
+list([Filename]) ->
+    lager:debug("In sb_vbox:list (filename)"),
+    sb_vm_common:list_by_file(Filename, command(?LIST_CMD, fun format_list/1)).
 
-% Get a VM by name or via an environment file
-get (Args) ->
-                                                % Args will be either the file name or the VM name
-    lager:debug("In sb_vbox:get/1"),
-    case filelib:is_file(hd(Args)) of
-        true ->
-            ok = get_by_file(Args);
-        false ->
-            ok = get_by_name(Args)
-    end.
-
-%% @doc Gets a VM(s) by the constraints given in the file.
-get_by_file(Args) ->
-    lager:debug("In sb_vbox:get_by_file with args: ~p", Args),
-                                                % Read in environment config file
-    case file:consult(Args) of
-        {ok, Properties} ->
-            VMList = command(?LIST_CMD, fun format_list/1),
-            Count = sb:get_config(count),
-
-            %% attempt to match the properties in the file with available VM's
-            case sb_vm_common:match_by_props(VMList, Properties, Count) of
-                {ok, SearchResult} ->
-                                                % The search results come back as the <vms> structure and
-                                                % and needs to be of the form of vm_info
-                                                % so translate each using match_by_name
-                    lager:debug("get_by_file: SearchResult: ~p", [SearchResult]),
-
-                    %% Get VM info and Start the VMs if they aren't already.
-                    VMInfo = [ get_vm(VM) || {VM,_,_,_} <- SearchResult ],
-
-                    PrintResult = fun(SearchRes) ->
-                                                % Get the name out
-                                          {ok, MBNRes} = sb_vm_common:match_by_name(VMInfo, element(1, SearchRes)),
-                                          sb_vm_common:print_result(MBNRes)
-                                  end,
-
-                                                % Print each result we got back
-                    lists:foreach(PrintResult, SearchResult),
-                    ok;
-                {error, Reason} ->
-                    lager:error("Unable to get VM: ~p", [Reason])
-            end;
-
-        {error, Reason} ->
-            lager:error("Failed to parse file: ~p with error: ~p", [Args, Reason]),
-            {error, Reason}
-    end.
-
+% @doc Get login information about VMs by name
+get ([]) ->
+    ok;
+get([Name|Rest]) ->
+    ok = get_by_name(Name),
+    ?MODULE:get(Rest).
 
 %% @doc Get a VM by name (alias).
-get_by_name([Alias|_Args]) ->
+get_by_name(Alias) ->
     VMInfo = get_vm(Alias),
     sb_vm_common:print_result([VMInfo]),
     ok.
@@ -107,11 +63,13 @@ get_by_name([Alias|_Args]) ->
 snapshot (Alias) ->
     lager:debug("In sb_vbox:snapshot with args: ~p", [Alias]),
     Force = sb:get_config(force,false),
-    case {snap_shot_exists(Alias),Force} of
-        {true,false} ->
+    Exists = snap_shot_exists(Alias),
+    case Force orelse not Exists of
+        false ->
             %% don't stomp existing snapshot in "safe" mode
+            lager:error("Snapshot for ~s already exists.~n", [Alias]),
             ok;
-        {_,true} ->
+        true ->
             command(?VMSTATE_CMD(Alias), Alias, fun format_snapshot/2),
             ok
     end.
