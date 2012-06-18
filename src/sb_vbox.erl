@@ -30,6 +30,7 @@
 -define(GET_IPDATA_CMD(VM), "vboxmanage guestproperty get " ++ VM ++ " /VirtualBox/GuestInfo/Net/0/V4/IP").
 -define(GET_PORTDATA_CMD(VM), "vboxmanage showvminfo " ++ VM ++ " | egrep \"name = .*ssh,.*host port = \"").
 -define(START_CMD(VM), "vboxmanage startvm " ++ VM ++ " --type headless").
+-define(FORCESTOP_CMD(VM), "VBoxManage controlvm " ++ VM ++ " poweroff").
 -define(LISTSNAPSHOTS_CMD(VM), "vboxmanage snapshot " ++ VM ++ " list").
 -define(VMSTATE_CMD(VM), "vboxmanage showvminfo --machinereadable " ++ VM ++ " | egrep VMState=").
 -define(SNAPSHOT_CMD(VM), "vboxmanage snapshot " ++ VM ++ " take " ++ VM ++ "_stableboy").
@@ -80,6 +81,8 @@ rollback (Alias) ->
     lager:debug("In sb_vbox:rollback with args: ~p", [Alias]),
     case snap_shot_exists(Alias) of
         true ->
+            command(?FORCESTOP_CMD(Alias)),
+            wait_for_poweroff(Alias,5),
             command(?RESTORE_CMD(Alias), Alias, fun format_restore/2);
         false ->
             lager:error("sb_vbox: rollback for ~s failed because no snapshot was found.", [Alias]),
@@ -99,6 +102,17 @@ brand(Alias, Meta) ->
 %% Internal functions
 %%-------------------
 
+wait_for_poweroff(Alias,0) -> {error, "Timed out waiting for VM " ++ Alias ++ " to power off."};
+wait_for_poweroff(Alias,NTries) ->
+    Output = command(?VMSTATE_CMD(Alias)),
+    case re:run(Output, "poweroff") of
+        {match, _} ->
+            ok;
+        nomatch ->
+            timer:sleep(1000),
+            wait_for_poweroff(Alias,NTries-1)
+    end.
+
 %% @doc Executes a command in the shell. The Callback is
 %% called with the stdout stream so that the data can be formatted
 %% before being returned.
@@ -109,6 +123,9 @@ command(Command, Callback) ->
 command(Command, Alias, Callback) ->
     Output = os:cmd(Command),
     Callback(Alias, Output).
+
+command(Command) ->
+    os:cmd(Command).
 
 %% get info from extra data memory of VBox, which must have previously
 %% been set by the user to describe their VM guest. For example, type
