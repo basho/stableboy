@@ -217,7 +217,7 @@ gzcommand(Command, Callback) ->
                   {ok, {_,StdOut,_}} ->
                       Callback(StdOut);
                   {error,{Code,_,StdErr}} ->
-                      lager:error("SSH Command failed with code ~p: ~p~n", [Code, StdErr]),
+                      lager:debug("SSH Command failed with code ~p: ~p~n", [Code, StdErr]),
                       {error, {Code, StdErr}}
               end
       end).
