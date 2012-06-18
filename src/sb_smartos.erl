@@ -82,7 +82,7 @@ snapshot(Alias) ->
             ok;
         true ->
             gzcommand(?STOPCMD(UUID)),
-            wait_for_stop(UUID),
+            ok = wait_for_stop(UUID),
             case create_snapshot(UUID, Exists) of
                 {error, Reason} ->
                     lager:error("sb_smartos: snapshot creation failed with ~p", [Reason]),
@@ -103,7 +103,7 @@ rollback(Alias) ->
             halt(1);
         true ->
             gzcommand(?FORCESTOPCMD(UUID)),
-            wait_for_stop(UUID),
+            ok = wait_for_stop(UUID),
             case gzcommand(?ROLLBACKCMD(UUID)) of
                 {error, Reason} ->
                     lager:error("sb_smartos: Rollback failed for ~s with ~p", [Alias, Reason]),
@@ -159,10 +159,16 @@ snapshot_exists(UUID) ->
 
 %% @doc Waits for a VM to get to the stopped state.
 wait_for_stop(UUID) ->
+    %% Wait a maximum of 60 secs
+    wait_for_stop(UUID, 6).
+
+wait_for_stop(_UUID, 0) ->
+    {error, timeout};
+wait_for_stop(UUID, Count) ->
     case gzcommand(?DETECTSTOPCMD(UUID)) of
         {error, _} ->
             timer:sleep(10000),
-            wait_for_stop(UUID);
+            wait_for_stop(UUID, Count - 1);
         _ ->
             ok
     end.
