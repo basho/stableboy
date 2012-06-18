@@ -276,7 +276,13 @@ get_by_name(Alias) ->
             ok;
         VMs ->
             gzcommand(?STARTCMD(Alias), fun started_vm/1),
-            sb_vm_common:print_result(VMs)
+            case sb_vm_common:wait_for_ssh_port(hd(VMs)) of
+                ok ->
+                    sb_vm_common:print_result(VMs);
+                {error, Reason} ->
+                    lager:error("VM did not open SSH port within allotted time: ~p", [Reason]),
+                    halt(1)
+            end
     end,
     ok.
 
