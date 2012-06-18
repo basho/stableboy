@@ -106,7 +106,7 @@ get_by_name([Alias|_Args]) ->
 %% cmd: vboxmanage take
 snapshot (Alias) ->
     lager:debug("In sb_vbox:snapshot with args: ~p", [Alias]),
-    Force = sb:get_config(force),
+    Force = sb:get_config(force,false),
     case {snap_shot_exists(Alias),Force} of
         {true,false} ->
             %% don't stomp existing snapshot in "safe" mode
@@ -205,34 +205,34 @@ format_list(Output) ->
     Xtras = [command(?GET_XDATA_CMD(Name), Name, fun format_extra/2) || Name <- Names],
     lists:map(fun({VM,OS,Ver,Arch,_User,_Pass}) -> {VM,OS,Ver,Arch} end, Xtras).
 
-%% Standard output is empty when there is no snapshot
-format_list_snapshot([]) -> false;
-format_list_snapshot(_) -> true.
+%% @doc Return true iff the snapshot listing shows no failure.
+format_list_snapshot(Output) ->
+        case re:run(Output, "ERROR_FAILURE") of
+        nomatch   -> true;
+        {match,_} -> false
+    end.
 
 %% Take a snapshot iff the VM is in the poweroff state, otherwise error halt(1)
 %% Output is like: VMState="poweroff" if all is good for snapshotting.
-format_snapshot(Output, Alias) ->
+format_snapshot(Alias, Output) ->
     case re:run(Output, "poweroff") of
         {match, _} ->
             command(?SNAPSHOT_CMD(Alias), fun took_snapshot/1);
         nomatch ->
-            Reason = "sb_vbox: failed to take snapshot. VM not powered off. " ++ Output,
-            io:format(Reason, []),
-            lager:error(Reason, []),
+            Reason = "sb_vbox: failed to take snapshot on " ++ Alias ++ ". VM not powered off.",
+            lager:error("~s", [Reason]),
             halt(1)
     end,
     ok.
 
 %% Restore a VM snapshot, halt on failure.
-format_restore(Output, Alias) ->
-    case re:run(Output, "[f|F]ailure") of
+format_restore(Alias,Output) ->
+    case re:run(Output, "FAILURE") of
         nomatch ->
             ok;
         {match,_} ->
             Reason = "sb_vbox: failed to restore snapshot for VM: " ++ Alias,
-            io:format("~s~n~p", [Reason, Output]),
-            lager:error("~s", [Reason]),
-            lager:error("~p", [Output]),
+            lager:error("~s: ~p", [Reason, Output]),
             halt(1)
     end.
 
