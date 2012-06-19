@@ -48,7 +48,7 @@ $ ./stableboy list ubuntu-vm.config
 #### List multiple (by count)
 
 You can specify a `--count` or `-n` on the command line to
-request a number of the same VM's.  So for example, if you need four
+request a number of the same VM's.  So for example, if you need two
 Ubuntu 11.04 VM's, you can:
 
 ```text
