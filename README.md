@@ -21,7 +21,9 @@ To see what VM's are currently available, use the `list` command.
 
 ```text
 $ ./stableboy list
-{"ubuntu-1104-64",ubuntu,[11,0,4],64}
+{"ubuntu-1104-64",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-2",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-3",ubuntu,[11,0,4],64},
 {"centos-57-64"},rhel,[5,7,0],64}
 ```
 
@@ -42,7 +44,9 @@ can be
 
 ```text
 $ ./stableboy list ubuntu-vm.config
-{"ubuntu-1104-64",ubuntu,[11,0,4],64}
+{"ubuntu-1104-64",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-2",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-3",ubuntu,[11,0,4],64},
 ```
 
 #### List multiple (by count)
@@ -73,10 +77,6 @@ Specify one or more (space separated) VMs by name as given by the `list`
 command.
 
 ```text
-$ ./stableboy list
-{"ubuntu-1104-64",ubuntu,[11,0,4],64}
-{"centos-57-64"},rhel,[5,7,0],64}
-
 $ ./stableboy get "ubuntu-1104-64"
 {ok,"192.168.1.118",22,"root","root"}
 ```
