@@ -289,11 +289,11 @@ get_by_name(Alias) ->
 %% @doc Format output for the 'list' command into Erlang terms.
 format_list(Output) ->
     JSONToVM = fun({struct, JSON}) ->
-                       Alias = binary_to_list(proplists:get_value(<<"alias">>, JSON)),
+                       Alias = to_list(proplists:get_value(<<"alias">>, JSON)),
                        {struct, Tags} = proplists:get_value(<<"tags">>, JSON),
-                       Platform = list_to_atom(binary_to_list(proplists:get_value(<<"platform">>, Tags))),
+                       Platform = to_atom(proplists:get_value(<<"platform">>, Tags)),
                        Version = version_to_intlist(proplists:get_value(<<"version">>, Tags)),
-                       Arch = list_to_integer(binary_to_list(proplists:get_value(<<"architecture">>, Tags))),
+                       Arch = to_integer(proplists:get_value(<<"architecture">>, Tags)),
                        {Alias,Platform,Version,Arch}
                end,
     [ JSONToVM(json2:decode(V)) || V <- re:split(Output, "\n", [{return, binary}, trim]) ].
@@ -301,14 +301,13 @@ format_list(Output) ->
 %% @doc Format output for the 'get' command into Erlang terms.
 format_get(Output) ->
     JSONToDetails = fun({struct, JSON}) ->
-                            Alias = binary_to_list(proplists:get_value(<<"alias">>, JSON)),
+                            Alias = to_list(proplists:get_value(<<"alias">>, JSON)),
                             {struct, Tags} = proplists:get_value(<<"tags">>, JSON),
                             NICS = proplists:get_value(<<"nics">>, JSON),
                             {struct, NIC} = hd(NICS),
-                            IP = binary_to_list(proplists:get_value(<<"ip">>, NIC)),
-                            User = binary_to_list(proplists:get_value(<<"user">>, Tags)),
-                            Password = binary_to_list(proplists:get_value(<<"password">>, Tags)),
-                            %% TODO: FIXME
+                            IP = to_list(proplists:get_value(<<"ip">>, NIC)),
+                            User = to_list(proplists:get_value(<<"user">>, Tags)),
+                            Password = to_list(proplists:get_value(<<"password">>, Tags)),
                             Port = 22,
                             {Alias,IP,Port,User,Password}
                     end,
@@ -323,5 +322,29 @@ started_vm(Output) ->
     lager:debug("Started VM! ~s", [Output]).
 
 %% @doc Converts a dot-delimited version string into a list of version integers.
+version_to_intlist(undefined) ->
+    undefined;
 version_to_intlist(V) ->
     [ list_to_integer(P) || P <- re:split(V, "[.]", [{return,list},trim]) ].
+
+%%
+%% Pessimistic conversion routines for vmadm output
+%%
+to_integer(undefined) ->
+    undefined;
+to_integer(L) when is_list(L) ->
+    list_to_integer(L);
+to_integer(B) when is_binary(B) ->
+    list_to_integer(binary_to_list(B)).
+
+to_atom(A) when is_atom(A) ->
+    A;
+to_atom(L) when is_list(L) ->
+    list_to_atom(L);
+to_atom(B) when is_binary(B) ->
+    binary_to_atom(B, utf8).
+
+to_list(undefined) ->
+    undefined;
+to_list(Bin) when is_binary(Bin) ->
+    binary_to_list(Bin).
