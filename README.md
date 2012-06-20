@@ -229,6 +229,17 @@ best to ensure that port 22 is the public ssh port. The same applies
 with automatic cloning - not supported yet. Same rule about supplying
 Username/Password as `sb_vbox` as well.
 
+**NOTE** Before you can connect to your global zone, you need to add the
+following line to your `/etc/ssh/sshd_config` file:
+
+`Ciphers aes128-ctr,aes192-ctr,aes256-ctr,arcfour128,arcfour256,arcfour,aes128-cbc,3des-cbc`
+
+Then restart sshd with
+
+`$ svcadm refresh ssh`
+
+
+
 ## Future / TODO
 
 1. Return default "global" Username/Password if branded pair isn't found.
