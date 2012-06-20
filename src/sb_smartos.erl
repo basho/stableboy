@@ -160,14 +160,14 @@ snapshot_exists(UUID) ->
 %% @doc Waits for a VM to get to the stopped state.
 wait_for_stop(UUID) ->
     %% Wait a maximum of 60 secs
-    wait_for_stop(UUID, 6).
+    wait_for_stop(UUID, sb:get_config(smartos_stop_timeout, 60)).
 
 wait_for_stop(_UUID, 0) ->
     {error, timeout};
 wait_for_stop(UUID, Count) ->
     case gzcommand(?DETECTSTOPCMD(UUID)) of
         {error, _} ->
-            timer:sleep(10000),
+            timer:sleep(1000),
             wait_for_stop(UUID, Count - 1);
         _ ->
             ok

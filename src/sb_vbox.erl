@@ -82,7 +82,7 @@ rollback (Alias) ->
     case snap_shot_exists(Alias) of
         true ->
             command(?FORCESTOP_CMD(Alias)),
-            wait_for_poweroff(Alias,5),
+            wait_for_poweroff(Alias, sb:get_config(vbox_poweroff_timeout, 5)),
             command(?RESTORE_CMD(Alias), Alias, fun format_restore/2);
         false ->
             lager:error("sb_vbox: rollback for ~s failed because no snapshot was found.", [Alias]),
