@@ -43,7 +43,8 @@ cli_options() ->
      {debug,       $d, "debug",  undefined, "Print extra debug output"},
      {config,      $f, "config", {string, filename:join([os:getenv("HOME"), ".stableboy"])},
       "Config file to use (defaults to .stableboy then ~/.stableboy)"},
-     {count,       $n, "count", {integer, 1}, "The number of harnesses to return (used for 'list' command)"}
+     {count,       $n, "count", {integer, undefined}, "The number of harnesses to return (used for 'list' command)"},
+     {force,       $F, "force", undefined, "When creating a snapshot, overwrite any existing snapshot"}
     ].
 
 cli_args(Configs) ->
@@ -58,10 +59,10 @@ cli_args() ->
      {"Commands:", " "},
      {" ", " "},
      {"help", "Print this usage page"},
-     {"list", "List the available VMs"},
-     {"get (<name>|<file>)",  "List matching VMs and their login credentials:"},
-     {" ", "  <name> for the named VM."},
+     {"list [<file>]", "List the available VMs"},
      {" ", "  <file> for VMs matching the Erlang terms in the named file."},
+     {"get [<name> ...])", "List named VMs and their login credentials:"},
+     {" ", "  <name> VM names/aliases"},
      {"brand <name> <platform:version:arch[:user:password]>",
       "Set metadata for named VM (supported by non-sb_file backends)"},
      {" ", "  <name> of the named VM."},
@@ -69,7 +70,9 @@ cli_args() ->
      {" ", "  <version> of VM, e.g. 12.04"},
      {" ", "  <arch> of VM, (32|64)."},
      {" ", "  <user> username for ssh login of VM."},
-     {" ", "  <password> password for ssh login of VM."}
+     {" ", "  <password> password for ssh login of VM."},
+     {"snapshot <name>", "Create a snapshot for the named VM."},
+     {"rollback <name>", "Rollback the VM to the existing snapshot"}
     ].
 
 %%------------------
@@ -99,6 +102,18 @@ do_command({brand, Name, Meta}) ->
     lager:debug("Running command 'brand'"),
     Backend:brand(Name, Meta);
 
+%% The 'snapshot' command
+do_command({snapshot, Name}) ->
+    Backend = get_backend(),
+    lager:debug("Running command 'snapshot'"),
+    Backend:snapshot(Name);
+
+%% The 'rollback' command
+do_command({rollback, Name}) ->
+    Backend = get_backend(),
+    lager:debug("Running command 'rollback'"),
+    Backend:rollback(Name);
+
 %% User didn't pass a command, print an error and the help.
 do_command(undefined) ->
     io:format("ERROR: No command given!~n~n"),
@@ -107,7 +122,7 @@ do_command(undefined) ->
 
 %% When user gives unknown command, print an error and the help
 do_command(Bad) ->
-    io:format("ERROR: Bad command given ~s!~n~n", [Bad]),
+    io:format("ERROR: Bad command given ~p!~n~n", [Bad]),
     do_command(help),
     halt(1).
 
@@ -166,10 +181,12 @@ process_option({config, Filename}, _Args, Result) ->
         {error, _Reason} ->
             halt(1)
     end;
-process_option({count, N},["get"|_], Result) ->
-    %% If the command is not 'get', we don't care about --count option
+process_option({count, N},["list"|_], Result) ->
+    %% If the command is not 'list', we don't care about --count option
     NewResult = proplists:delete(count, Result),
     [{count, N}|NewResult];
+process_option(force, ["snapshot"|_], Result) ->
+    [{force,true}|Result];
 process_option(Option, _Args, Result) ->
     %% Ignore anything else.
     lager:debug("Ignoring option: ~p~n", [Option]),
@@ -206,6 +223,9 @@ overrides_command(help) -> true;
 overrides_command(_) -> false.
 
 %% Validate number of arguments to commands
+validate_command(list, []) -> ok;
+validate_command(list, [_Filename]) -> ok;
+validate_command(list, _) -> {error, "Too many arguments for the list command, which requires nothing or an environment file."};
 validate_command(rollback, [_Name]) -> ok;
 validate_command(rollback, _) -> {error, "The rollback command requires a single VM name"};
 validate_command(snapshot, [_Name]) -> ok;
