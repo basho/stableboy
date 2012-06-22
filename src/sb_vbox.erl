@@ -149,14 +149,6 @@ format_extra(Alias,Output) ->
         _ -> Unknown
     end.
 
-%% @doc Extract the IP address from the output of the virtual box "guestproperty" result.
-%% This will look at the first adapter only. The first one is assumed to be the public IP.
-format_ipdata(Output) ->
-    case re:split(Output, "[ \n]", [{return, list},trim]) of
-        ["Value:",IP] -> IP;
-        _ -> undefined
-    end.
-
 %% Find the SSH port, even when it's Port Forwarded
 format_portdata(Output) ->
     case re:split(Output, "host port = ", [{return, list},trim]) of
@@ -284,7 +276,6 @@ wait_for_ip(Alias,NTries) ->
 %% otherwise Port defaults to 22. IP addr is taken from the first NIC, namely
 %% adapter 0.
 get_conn_data(Name) ->
-    %%Addr = command(?GET_IPDATA_CMD(Name), fun format_ipdata/1),
     % wait for up to 2 minutes for an IP
     Addr = wait_for_ip(Name,120),
     Port = command(?GET_PORTDATA_CMD(Name), fun format_portdata/1),
