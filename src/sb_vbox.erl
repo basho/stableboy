@@ -263,13 +263,30 @@ get_vm(VM) ->
             end
     end.
 
+
+%% @doc Wait for a VM's IP
+%% used after rollback
+wait_for_ip(Alias,0) -> {error, "Timed out waiting for VM " ++ Alias
+                            ++ " IP address."};
+wait_for_ip(Alias,NTries) ->
+    Output = command(?GET_IPDATA_CMD(Alias)),
+    case re:run(Output, "Value: (.*)", [{capture,[1],list}]) of
+        {match, [Ip|_]} -> Ip;
+        nomatch ->
+            timer:sleep(1000),
+            wait_for_ip(Alias,NTries-1)
+    end.
+
+
 %% @doc Get IP and Port address information for a named VM.
 %% Fetches data from virtual box manager, including port forwarded ssh ports
 %% providing that the port forwarding rule has the text "ssh" in it's name,
 %% otherwise Port defaults to 22. IP addr is taken from the first NIC, namely
 %% adapter 0.
 get_conn_data(Name) ->
-    Addr = command(?GET_IPDATA_CMD(Name), fun format_ipdata/1),
+    %%Addr = command(?GET_IPDATA_CMD(Name), fun format_ipdata/1),
+    % wait for up to 2 minutes for an IP
+    Addr = wait_for_ip(Name,120),
     Port = command(?GET_PORTDATA_CMD(Name), fun format_portdata/1),
     {Addr, Port}.
 
