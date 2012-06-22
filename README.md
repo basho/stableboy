@@ -21,7 +21,9 @@ To see what VM's are currently available, use the `list` command.
 
 ```text
 $ ./stableboy list
-{"ubuntu-1104-64",ubuntu,[11,0,4],64}
+{"ubuntu-1104-64",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-2",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-3",ubuntu,[11,0,4],64},
 {"centos-57-64"},rhel,[5,7,0],64}
 ```
 
@@ -33,6 +35,37 @@ The format of the return value is:
 See the `brand` command for adding this information to specific VMs
 when using the sb_vbox or sb_smartos backends.
 
+#### List by Environment (env file)
+
+The file (full path) that describes the environment you want.  This is taken directly from
+[basho_harness](https://github.com/basho/basho_harness) and an example
+can be
+[found here](https://github.com/basho/basho_harness/blob/master/envs/ubuntu-1104-64.config).
+
+```text
+$ ./stableboy list ubuntu-vm.config
+{"ubuntu-1104-64",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-2",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-3",ubuntu,[11,0,4],64},
+```
+
+#### List multiple (by count)
+
+You can specify a `--count` or `-n` on the command line to
+request a number of the same VM's.  So for example, if you need two
+Ubuntu 11.04 VM's, you can:
+
+```text
+$ ./stableboy --count 2 list ubuntu-vm.config
+{"ubuntu-1104-64",ubuntu,[11,0,4],64},
+{"ubuntu-1104-64-2",ubuntu,[11,0,4],64}
+```
+
+If the number of VM's requested isn't available, an `{error, Reason}`
+tuple will be returned. You will not get a partial list of Vm's.
+
+The count argument is only supported by the `sb_vbox` and `sb_smartos` backends.
+
 ### Get
 
 To get access to one of these VM's, you can issue a `get` command.
@@ -40,30 +73,10 @@ To get access to one of these VM's, you can issue a `get` command.
 The return value of `get` is the following format `{ok,
 "<ip_address>", port, "user", "password"}` or `{error, "Reason"}`
 
-The `get` command has a few options in its use.
-
-#### Get by Environment (env file)
-
-The first can be a file (full path) that describes the environment you
-want.  This is taken directly from
-[basho_harness](https://github.com/basho/basho_harness) and an example
-can be
-[found here](https://github.com/basho/basho_harness/blob/master/envs/ubuntu-1104-64.config).
-
-```text
-$ ./stableboy get ubuntu-vm.config
-{ok,"192.168.1.118",22,"root","root"}
-```
-
-#### Get by Name
-
-Second, you can specify a particular VM by name as given by the `list`
+Specify one or more (space separated) VMs by name as given by the `list`
 command.
 
 ```text
-$ ./stableboy list
-{"ubuntu-1104-64",ubuntu,[11,0,4],64}
-{"centos-57-64"},rhel,[5,7,0],64}
 $ ./stableboy get "ubuntu-1104-64"
 {ok,"192.168.1.118",22,"root","root"}
 ```
@@ -96,25 +109,25 @@ If you don't specify the username and password, then make sure you
 set the global `vm_user` and `vm_pass` properties in the configuration
 file.
 
-#### Multi-Get (count)
+### Snapshot
 
-Lastly, you can specify a `--count` or `-n` on the command line to
-request a number of the same VM's.  So for example, if you need four
-Ubuntu 11.04 VM's, you can:
+A snapshot of the VM can be taken by hand for use in the rollback command. In order to take
+a snapshot, the VM must be powered off. Only the disk state is captured. Only one snapshot is
+maintained per named VM. If a snapshot already exists, you must use the `--force` flag to allow
+overwriting the existing snapshot. This command is not meant to be called by `basho_harness`.
 
 ```text
-$ ./stableboy --count 4 get ubuntu-vm.config
-{ok,"192.168.1.118",22,"root","root"}
-{ok,"192.168.1.119",22,"root","root"}
-{ok,"192.168.1.120",22,"root","root"}
-
-{ok,"192.168.1.121",22,"root","root"}
+$ ./stableboy snapshot --force ubuntu-1104-64
 ```
 
-If the number of VM's requested isn't available, an `{error, Reason}`
-tuple will be returned. You will not get a partial list of Vm's.
+### Rollback
 
-Multi-get is only supported by the `sb_vbox` backend currently.
+Before a test is run, `basho_harness` may call `rollback` to force the VM into a powered off
+and clean state. There is no force flag required, so be careful if you use this by hand.
+
+```test
+$ ./stableboy rollback ubuntu-1104-64
+```
 
 ## Backends
 
@@ -216,12 +229,22 @@ best to ensure that port 22 is the public ssh port. The same applies
 with automatic cloning - not supported yet. Same rule about supplying
 Username/Password as `sb_vbox` as well.
 
+**NOTE** Before you can connect to your global zone, you need to add the
+following line to your `/etc/ssh/sshd_config` file:
+
+`Ciphers aes128-ctr,aes192-ctr,aes256-ctr,arcfour128,arcfour256,arcfour,aes128-cbc,3des-cbc`
+
+Then restart sshd with
+
+`$ svcadm refresh ssh`
+
+
+
 ## Future / TODO
 
 1. Return default "global" Username/Password if branded pair isn't found.
-2. Automatic rollback to last snapshot before getting a VM
-3. Maybe support cloning.
-4. Command for deletion of VM clones
+2. Maybe support cloning.
+3. Command for deletion of VM clones
 
 ## Optional Flags
 
