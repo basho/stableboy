@@ -48,7 +48,7 @@
 -define(STOPCMD(U), io_lib:format("vmadm stop ~s",[U])).
 -define(FORCESTOPCMD(U), io_lib:format("~s -f", [?STOPCMD(U)])).
 -define(ROLLBACKCMD(U), io_lib:format("zfs rollback ~s", [snapshot_name(U)])).
--define(DETECTDISKCMD(U), io_lib:format("vmadm get ~s | json disks.0.zfs_filesystem", [U])).
+-define(DETECTDISKCMD(U), io_lib:format("vmadm get ~s | json disks.0.zfs_filesystem zfs_filesystem", [U])).
 -define(DETECTSNAPCMD(U), io_lib:format("zfs list -t snapshot ~s", [snapshot_name(U)])).
 -define(DETECTSTOPCMD(U), io_lib:format("vmadm list state=stopped | grep ~s", [U])).
 -define(DESTROYSNAPCMD(U), io_lib:format("zfs destroy ~s",[snapshot_name(U)])).
