@@ -68,7 +68,7 @@ snapshot (Alias) ->
     case Force orelse not Exists of
         false ->
             %% don't stomp existing snapshot in "safe" mode
-            lager:error("Snapshot for ~s already exists.~n", [Alias]),
+            lager:error("Stableboy snapshot for ~s already exists. Use --force to overwrite.~n", [Alias]),
             ok;
         true ->
             command(?VMSTATE_CMD(Alias), Alias, fun format_snapshot/2),
@@ -172,13 +172,6 @@ format_list(Output) ->
     Xtras = [command(?GET_XDATA_CMD(Name), Name, fun format_extra/2) || Name <- Names],
     lists:map(fun({VM,OS,Ver,Arch,_User,_Pass}) -> {VM,OS,Ver,Arch} end, Xtras).
 
-%% @doc Return true iff the snapshot listing shows no failure.
-format_list_snapshot(Output) ->
-        case re:run(Output, "ERROR_FAILURE") of
-        nomatch   -> true;
-        {match,_} -> false
-    end.
-
 %% Take a snapshot iff the VM is in the poweroff state, otherwise error halt(1)
 %% Output is like: VMState="poweroff" if all is good for snapshotting.
 format_snapshot(Alias, Output) ->
@@ -210,7 +203,22 @@ vm_is_running(Alias) ->
 
 %% @doc return whether a snapshot exists for a named VM
 snap_shot_exists(Alias) ->
-    command(?LISTSNAPSHOTS_CMD(Alias), fun format_list_snapshot/1).
+    Output = command(?LISTSNAPSHOTS_CMD(Alias)),
+    Lines = [Line || Line <- re:split(Output, "[\n]", [{return, list}]), Line /= []],
+    %% Result is 'true' if any line contains a stableboy match.
+    lists:foldl(
+      fun(Line, Accum) ->
+              StableboySnapShotName = Alias ++ "_stableboy",
+              Exists =
+                  case re:run(Line, ".*Name: ([^ ]*) .*", [{capture,[1],list}]) of
+                      {match, [StableboySnapShotName|_]} -> true;
+                      {match, [_OtherSnapShotName|_]} -> false;
+                      nomatch -> false
+                  end,
+              Exists or Accum
+      end,
+      false,
+      Lines).
 
 %% Try to make sure the VM is running before returning.
 %% Sleeps 1 second between trys to start the VM
