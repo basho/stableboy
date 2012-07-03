@@ -28,12 +28,16 @@
 %%
 %% In the case of the sb_file backend, this should be in the stableboy
 %% config file that is read in at startup
-list(_) ->
+list([]) ->
     lager:debug("In sb_file:list"),
 
     VMS = sb:get_config(vms),
     sb_vm_common:print_result(VMS),
-    ok.
+    ok;
+list([Filename]) ->
+    VMS = sb:get_config(vms),
+    sb_vm_common:list_by_file(Filename, VMS).
+
 
 
 %% Get by file, where file contains a description of what is needed

@@ -218,8 +218,8 @@ match_all (VMList, Env) ->
 
 %% match (A,B) ensures that platform A >= B
 match (_, {'*', '*', '*'}) -> true;
-match ({F,Va,A},{F,Vb,A}) -> cmp_version(Va,Vb) =/= lt;
-match ({F,Va,_},{F,Vb,'*'}) -> cmp_version(Va,Vb) =/= lt;
+match ({F,Va,A},{F,Vb,A}) -> cmp_version(Va,Vb) == eq;
+match ({F,Va,_},{F,Vb,'*'}) -> cmp_version(Va,Vb) == eq;
 match ({F,_,_},{F,'*','*'}) -> true;
 match (_,_) -> false.
 
