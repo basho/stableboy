@@ -29,16 +29,14 @@
 %% In the case of the sb_file backend, this should be in the stableboy
 %% config file that is read in at startup
 list([]) ->
-    lager:debug("In sb_file:list"),
-
+    lager:debug("In sb_file:list (unfiltered)"),
     VMS = sb:get_config(vms),
-    sb_vm_common:print_result(VMS),
+    sb_vm_common:list_by_properties([{platform, '*'}], VMS),
     ok;
 list([Filename]) ->
+    lager:debug("In sb_file:list (filename)"),
     VMS = sb:get_config(vms),
     sb_vm_common:list_by_file(Filename, VMS).
-
-
 
 %% Get by file, where file contains a description of what is needed
 %% The file format is defined by basha_harness env files
