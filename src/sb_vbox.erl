@@ -154,10 +154,10 @@ format_portdata(Output) ->
     case re:split(Output, "host port = ", [{return, list},trim]) of
         [First|Rest] when First /= [] ->
             [Port|_Other] = re:split(Rest, "[ ,\"]", [{return, list},trim]),
-            list_to_integer(Port);
+            {forwarded,list_to_integer(Port)};
         _ ->
-            %% hard-coded. Nowhere to get it from.
-            22
+            %% Not set. Assume default
+            {default,22}
     end.
 
 %% @doc Format the output from the virtual box "list vms" command into just the names.
@@ -278,8 +278,13 @@ wait_for_ip(Alias,NTries) ->
 get_conn_data(Name) ->
     % wait for up to 2 minutes for an IP
     Addr = wait_for_ip(Name,120),
-    Port = command(?GET_PORTDATA_CMD(Name), fun format_portdata/1),
-    {Addr, Port}.
+    case command(?GET_PORTDATA_CMD(Name), fun format_portdata/1) of
+        {forwarded,Port} ->
+            %% if the Port is forwarded, use our localhost
+            {"127.0.0.1", Port};
+        {default,Port} ->
+            {Addr, Port}
+    end.
 
 %% @doc Callback for result of starting a VM
 started_vm(Output) ->
