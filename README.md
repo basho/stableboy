@@ -1,8 +1,12 @@
+**NOTE** This repo is not used anymore within Basho and is not supported
+in any way.  It is open sourced because there are a few interesting
+bits of code that might be useful to someone down the road.
+
 # Stableboy
 
 Stableboy is a tool for provisioning machines to be used for testing.
 In the case of basho_harness, stableboy returns harnesses by request.
-Think Vagrant in Erlang, but not tied directly to Virtualbox.
+Think Vagrant-lite in Erlang, but not tied directly to Virtualbox.
 
 ## Config File
 
